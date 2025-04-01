@@ -1,0 +1,23 @@
+{
+  "name": "zen-tab",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "webextension-toolbox build",
+    "dev": "webextension-toolbox dev"
+  },
+  "keywords": [],
+  "author": "Sonu Sharma",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/chrome": "^0.0.313",
+    "@types/webextension-polyfill": "^0.12.3",
+    "@webextension-toolbox/webextension-toolbox": "^7.1.1",
+    "typescript": "^5.8.2"
+  },
+  "dependencies": {
+    "webextension-polyfill": "^0.12.0"
+  }
+}

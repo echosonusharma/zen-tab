@@ -1,0 +1,7 @@
+src: app
+target: dist/chrome
+devtool: cheap-source-map
+manifestValidation: true
+autoReload: true
+port: "35729"
+verbose: true
