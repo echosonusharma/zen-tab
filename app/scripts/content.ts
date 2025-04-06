@@ -7,7 +7,7 @@ function modifyPage() {
   app.style.position = 'fixed';
   app.style.bottom = '10px';
   app.style.right = '10px';
-  app.style.backgroundColor = '#f0f0f0';
+  app.style.backgroundColor = 'red';
   app.style.padding = '10px';
 
   app.style.zIndex = '9999';
