@@ -26,5 +26,31 @@
       "matches": ["<all_urls>"],
       "js": ["scripts/content.js"]
     }
-  ]
+  ],
+  "commands": {
+    "next_tab": {
+      "suggested_key": {
+        "default": "Alt+X"
+      },
+      "description": "move to next tab"
+    },
+    "prev_tab": {
+      "suggested_key": {
+        "default": "Alt+Z"
+      },
+      "description": "move to previous tab"
+    },
+    "next_win": {
+      "suggested_key": {
+        "default": "Alt+W"
+      },
+      "description": "move to next window"
+    },
+    "prev_win": {
+      "suggested_key": {
+        "default": "Alt+Q"
+      },
+      "description": "move to previous window"
+    }
+  }
 }
