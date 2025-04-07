@@ -6,6 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "webextension-toolbox build",
+    "postbuild": "mkdir -p packages/unpacked && find packages -type f -name '*zen*.zip' | while read file; do name=$(basename \"$file\" .zip); unzip -n \"$file\" -d \"packages/unpacked/$name\"; done",
     "dev": "webextension-toolbox dev"
   },
   "keywords": [],
