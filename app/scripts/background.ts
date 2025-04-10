@@ -1,5 +1,6 @@
 import browser from "webextension-polyfill";
 import { Store, StoreType } from "./utils";
+import { parseTabData } from "./search";
 
 type TabData = Record<number, browser.Tabs.Tab[]>;
 
@@ -18,14 +19,14 @@ function logger(message: string, ...args: any[]): void {
   console.log("\x1b[95m%s\x1b[0m", "ZenTab:", message, ...args);
 }
 
-browser.windows.onFocusChanged.addListener(async (windowId) => {
+browser.windows.onFocusChanged.addListener(async (windowId: number) => {
   if (windowId && windowId !== -1) {
     activeWindowId = windowId;
-    await updateTabStores({ windowId: windowId }); // meh
+    // await updateTabStores({ windowId: windowId });
   }
 });
 
-browser.windows.onRemoved.addListener(async (windowId) => {
+browser.windows.onRemoved.addListener(async (windowId: number) => {
   try {
     const tabsData = (await tabsStore.get()) as TabData;
 
@@ -38,7 +39,7 @@ browser.windows.onRemoved.addListener(async (windowId) => {
   }
 });
 
-browser.windows.onCreated.addListener(async (window) => {
+browser.windows.onCreated.addListener(async (window: browser.Windows.Window) => {
   try {
     if (window && window.id && window.id !== -1) {
       activeWindowId = window.id;
@@ -49,12 +50,14 @@ browser.windows.onCreated.addListener(async (window) => {
   }
 });
 
-browser.runtime.onInstalled.addListener(async () => {
-  await initWindowAndTabData();
-  console.log("\x1b[96m%s\x1b[0m", "ZenTab installed 🎐");
-});
-
+browser.runtime.onInstalled.addListener(async () => await initWindowAndTabData());
 browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
+
+// browser.idle.onStateChanged.addListener((newState) => {
+//   if (newState === 'active') {
+//     // PC is active again
+//   }
+// });
 
 async function initWindowAndTabData(): Promise<void> {
   const currentWindow = await browser.windows.getCurrent({});
@@ -68,6 +71,9 @@ async function updateTabStores(tabQueryOptions: browser.Tabs.QueryQueryInfoType 
   try {
     const PData = await Promise.all([browser.tabs.query(tabQueryOptions), tabsStore.get()]);
     const data: browser.Tabs.Tab[] = PData[0];
+
+    console.log(data)
+    // data.forEach((x) => parseTabData(x));
     const tabsData = PData[1] as TabData;
 
     activeTabId = data.find((t) => t.active === true)?.id as number;
@@ -118,7 +124,7 @@ browser.tabs.onCreated.addListener(async (tab: browser.Tabs.Tab) => {
   }
 });
 
-browser.tabs.onMoved.addListener(async (tabId, moveInfo) => {
+browser.tabs.onMoved.addListener(async (tabId: number, moveInfo: browser.Tabs.OnMovedMoveInfoType) => {
   try {
     const tabsData = (await tabsStore.get()) as TabData;
     const windowTabs = tabsData[moveInfo.windowId];
@@ -137,7 +143,7 @@ browser.tabs.onMoved.addListener(async (tabId, moveInfo) => {
   }
 });
 
-browser.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
+browser.tabs.onRemoved.addListener(async (tabId: number, removeInfo: browser.Tabs.OnRemovedRemoveInfoType) => {
   try {
     const tabsData = (await tabsStore.get()) as TabData;
 
@@ -150,11 +156,12 @@ browser.tabs.onRemoved.addListener(async (tabId, removeInfo) => {
   }
 });
 
-browser.tabs.onActivated.addListener((activeInfo) => {
+browser.tabs.onActivated.addListener((activeInfo: browser.Tabs.OnActivatedActiveInfoType) => {
   activeTabId = activeInfo.tabId;
 });
 
-browser.commands.onCommand.addListener(async (command) => {
+browser.commands.onCommand.addListener(async (command: string) => {
+  console.log(command)
   if (!activeTabId || !activeWindowId) {
     return;
   }

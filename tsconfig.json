@@ -11,7 +11,11 @@
     "noImplicitAny": true,
     "removeComments": true,
     "noLib": false,
-    "lib": ["es2018", "dom"]
+    "lib": ["es2018", "dom"],
+    "jsx": "react",
+    "jsxFactory": "h",
+    "jsxFragmentFactory": "Fragment",
+    "types": ["preact"]
   },
   "include": ["app/**/*"],
   "exclude": ["node_modules"]

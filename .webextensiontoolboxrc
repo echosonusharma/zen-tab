@@ -5,3 +5,4 @@ manifestValidation: true
 autoReload: true
 port: "35729"
 verbose: true
+config: webextension-toolbox.config.js

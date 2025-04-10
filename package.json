@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "webextension-toolbox build",
-    "postbuild": "mkdir -p packages/unpacked && find packages -type f -name '*zen*.zip' | while read file; do name=$(basename \"$file\" .zip); unzip -n \"$file\" -d \"packages/unpacked/$name\"; done",
+    "postbuild": "bash ./scripts/unpack_zip.sh",
     "dev": "webextension-toolbox dev"
   },
   "keywords": [],
@@ -16,9 +16,14 @@
     "@types/chrome": "^0.0.313",
     "@types/webextension-polyfill": "^0.12.3",
     "@webextension-toolbox/webextension-toolbox": "^7.1.1",
+    "css-loader": "^6.10.0",
+    "style-loader": "^3.3.4",
+    "ts-loader": "^9.5.1",
     "typescript": "^5.8.2"
   },
   "dependencies": {
+    "emoji-regex": "^10.4.0",
+    "preact": "^10.19.6",
     "webextension-polyfill": "^0.12.0"
   }
 }
