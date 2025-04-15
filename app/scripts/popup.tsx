@@ -1,56 +1,69 @@
 import { h } from 'preact';
 import { render } from 'preact';
 import { useState, useEffect } from 'preact/hooks';
-import browser from 'webextension-polyfill';
+import { Store } from "./utils";
+import { StoreType } from './types';
 import '../styles/popup.css';
 
-interface Tab {
-  id: number;
-  title: string;
-  url: string;
-  active: boolean;
-}
+const audioCaptureStore: Store = new Store("audioCapture", StoreType.LOCAL);
+const searchTabStore: Store = new Store("searchTab", StoreType.LOCAL);
 
 function Popup() {
-  const [tabs, setTabs] = useState<Tab[]>([]);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [audioCapture, setAudioCapture] = useState(false);
+  const [searchTab, setSearchTab] = useState(false);
 
   useEffect(() => {
-    browser.tabs.query({}).then((tabs) => {
-      setTabs(tabs as Tab[]);
-    });
+    const setData = async () => {
+      const currAudioCaptureVal = await audioCaptureStore.get() as boolean;
+      const currSearchTabVal = await searchTabStore.get() as boolean;
+
+      setAudioCapture(currAudioCaptureVal);
+      setSearchTab(currSearchTabVal);
+    };
+
+    setData();
   }, []);
 
-  const filteredTabs = tabs.filter(tab => 
-    tab.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    tab.url.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const handleAudioCaptureChange = async (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    const newValue = target.checked;
+    setAudioCapture(newValue);
+    await audioCaptureStore.set(newValue);
+  };
+
+  const handleSearchTabChange = async (e: Event) => {
+    const target = e.target as HTMLInputElement;
+    const newValue = target.checked;
+    setSearchTab(newValue);
+    await searchTabStore.set(newValue);
+  };
 
   return (
     <div class="app">
-      <header>
-        <h1>ZenTab</h1>
-        <input
-          type="text"
-          placeholder="Search tabs..."
-          value={searchQuery}
-          onInput={(e) => setSearchQuery((e.target as HTMLInputElement).value)}
-        />
-      </header>
-      <main>
-        <div class="tabs-list">
-          {filteredTabs.map(tab => (
-            <div 
-              key={tab.id} 
-              class={`tab-item ${tab.active ? 'active' : ''}`}
-              onClick={() => browser.tabs.update(tab.id, { active: true })}
-            >
-              <span class="tab-title">{tab.title}</span>
-              <span class="tab-url">{tab.url}</span>
-            </div>
-          ))}
+      <div class="toggle-container">
+        <div class="toggle-wrapper">
+          <span class="toggle-label">Audio Capture</span>
+          <label class="toggle">
+            <input
+              type="checkbox"
+              checked={audioCapture}
+              onChange={handleAudioCaptureChange}
+            />
+            <span class="toggle-slider"></span>
+          </label>
         </div>
-      </main>
+        <div class="toggle-wrapper">
+          <span class="toggle-label">Search Tab</span>
+          <label class="toggle">
+            <input
+              type="checkbox"
+              checked={searchTab}
+              onChange={handleSearchTabChange}
+            />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,9 +1,5 @@
 import browser from "webextension-polyfill";
-
-export enum StoreType {
-  LOCAL = 'local',
-  SESSION = 'session'
-}
+import { ExtensionMessage, StoreType } from "./types";
 
 export class Store {
   public keyName: string;
@@ -43,5 +39,27 @@ export class Store {
       console.error(`Error setting data for key ${this.keyName}:`, error);
       return false;
     }
+  }
+}
+
+export function logger(message: string, ...args: any[]): void {
+  console.log("\x1b[95m%s\x1b[0m", "ZenTab:", message, ...args);
+}
+
+export async function broadcastMsgToServiceWorker(data: ExtensionMessage): Promise<any> {
+  try {
+    return await browser.runtime.sendMessage(data);
+  } catch (err) {
+    console.warn("Service worker not available:", err);
+    return null;
+  }
+}
+
+export async function sendMessageToContentScript(tabId: number, data: ExtensionMessage): Promise<any> {
+  try {
+    return await browser.tabs.sendMessage(tabId, data);
+  } catch (err) {
+    console.error("Error sending message to content script:", err);
+    return null;
   }
 }

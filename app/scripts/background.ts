@@ -1,28 +1,26 @@
 import browser from "webextension-polyfill";
-import { Store, StoreType } from "./utils";
-import { parseTabData } from "./search";
+import { ExtensionMessage, StoreType, TabData } from './types';
+import { Store, logger, sendMessageToContentScript } from "./utils";
+// import { parseTabData } from "./search";
 
-type TabData = Record<number, browser.Tabs.Tab[]>;
-
-const tabsStore: Store = new Store("tabs", StoreType.LOCAL);
-
-let activeTabId: number;
-let activeWindowId: number;
+const PATH_TO_CONTENT_SCRIPT = 'scripts/content.js';
 
 const TAB_COMMANDS = ["next_tab", "prev_tab"] as const;
 const WINDOW_COMMANDS = ["next_win", "prev_win"] as const;
+const SEARCH_COMMANDS = ["open_search", "close_search"] as const;
 
 type TabCommand = (typeof TAB_COMMANDS)[number];
 type WindowCommand = (typeof WINDOW_COMMANDS)[number];
+type SearchCommand = (typeof SEARCH_COMMANDS)[number];
 
-function logger(message: string, ...args: any[]): void {
-  console.log("\x1b[95m%s\x1b[0m", "ZenTab:", message, ...args);
-}
+const tabsStore: Store = new Store("tabs", StoreType.LOCAL);
+
+const activeTabIdStore: Store = new Store("activeTabId", StoreType.SESSION);
+const activeWindowIdStore: Store = new Store("activeWindowId", StoreType.SESSION);
 
 browser.windows.onFocusChanged.addListener(async (windowId: number) => {
   if (windowId && windowId !== -1) {
-    activeWindowId = windowId;
-    // await updateTabStores({ windowId: windowId });
+    await activeWindowIdStore.set(windowId);
   }
 });
 
@@ -42,7 +40,7 @@ browser.windows.onRemoved.addListener(async (windowId: number) => {
 browser.windows.onCreated.addListener(async (window: browser.Windows.Window) => {
   try {
     if (window && window.id && window.id !== -1) {
-      activeWindowId = window.id;
+      await activeWindowIdStore.set(window.id);
       await updateTabStores({ windowId: window.id });
     }
   } catch (error) {
@@ -53,16 +51,34 @@ browser.windows.onCreated.addListener(async (window: browser.Windows.Window) => 
 browser.runtime.onInstalled.addListener(async () => await initWindowAndTabData());
 browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
 
-// browser.idle.onStateChanged.addListener((newState) => {
-//   if (newState === 'active') {
-//     // PC is active again
-//   }
-// });
+browser.idle.onStateChanged.addListener(async (newState) => {
+  if (newState === 'active') {
+    const tabs = await browser.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+  
+    const tab = tabs[0];
+
+    await activeTabIdStore.set(tab.id);
+    await activeWindowIdStore.set(tab.windowId);
+  }
+});
+
+browser.runtime.onMessage.addListener(
+  async (message: unknown, _sender: browser.Runtime.MessageSender): Promise<any> => {
+    const msg = message as ExtensionMessage;
+    if (msg?.action === "getCurrentWindowId") {
+      const activeWindowId = (await activeWindowIdStore.get()) as number;
+      return activeWindowId;
+    }
+  }
+);
 
 async function initWindowAndTabData(): Promise<void> {
   const currentWindow = await browser.windows.getCurrent({});
   if (currentWindow.id) {
-    activeWindowId = currentWindow.id;
+    await activeWindowIdStore.set(currentWindow.id);
   }
   await updateTabStores();
 }
@@ -72,11 +88,12 @@ async function updateTabStores(tabQueryOptions: browser.Tabs.QueryQueryInfoType 
     const PData = await Promise.all([browser.tabs.query(tabQueryOptions), tabsStore.get()]);
     const data: browser.Tabs.Tab[] = PData[0];
 
-    console.log(data)
+    // console.log(data);
     // data.forEach((x) => parseTabData(x));
     const tabsData = PData[1] as TabData;
 
-    activeTabId = data.find((t) => t.active === true)?.id as number;
+    const activeTabId = data.find((t) => t.active === true)?.id as number;
+    await activeTabIdStore.set(activeTabId);
 
     const tabsByWindowId: TabData = data.reduce((acc: TabData, curVal: browser.Tabs.Tab) => {
       const tabWindowId = curVal.windowId;
@@ -156,12 +173,14 @@ browser.tabs.onRemoved.addListener(async (tabId: number, removeInfo: browser.Tab
   }
 });
 
-browser.tabs.onActivated.addListener((activeInfo: browser.Tabs.OnActivatedActiveInfoType) => {
-  activeTabId = activeInfo.tabId;
+browser.tabs.onActivated.addListener(async (activeInfo: browser.Tabs.OnActivatedActiveInfoType) => {
+  await activeTabIdStore.set(activeInfo.tabId);
 });
 
 browser.commands.onCommand.addListener(async (command: string) => {
-  console.log(command)
+  const activeTabId = (await activeTabIdStore.get()) as number;
+  const activeWindowId = (await activeWindowIdStore.get()) as number;
+
   if (!activeTabId || !activeWindowId) {
     return;
   }
@@ -169,13 +188,20 @@ browser.commands.onCommand.addListener(async (command: string) => {
   const tabIdsData = (await tabsStore.get()) as TabData;
 
   if (["next_tab", "prev_tab"].includes(command)) {
-    await handledTabMoveCmd(tabIdsData, command as TabCommand);
+    await handledTabMoveCmd(tabIdsData, command as TabCommand, activeTabId, activeWindowId);
   } else if (["next_win", "prev_win"].includes(command)) {
-    await handledWindowMoveCmd(tabIdsData, command as WindowCommand);
+    await handledWindowMoveCmd(tabIdsData, command as WindowCommand, activeWindowId);
+  } else if (["open_search", "close_search"].includes(command)) {
+    await handledSearchCmd(tabIdsData, command as SearchCommand, activeTabId, activeWindowId);
   }
 });
 
-async function handledTabMoveCmd(tabIdsData: TabData, command: TabCommand): Promise<void> {
+async function handledTabMoveCmd(
+  tabIdsData: TabData,
+  command: TabCommand,
+  activeTabId: number,
+  activeWindowId: number
+): Promise<void> {
   try {
     const windowTabIds = tabIdsData[activeWindowId];
 
@@ -206,7 +232,11 @@ async function handledTabMoveCmd(tabIdsData: TabData, command: TabCommand): Prom
   }
 }
 
-async function handledWindowMoveCmd(tabIdsData: TabData, command: WindowCommand): Promise<void> {
+async function handledWindowMoveCmd(
+  tabIdsData: TabData,
+  command: WindowCommand,
+  activeWindowId: number
+): Promise<void> {
   try {
     const windows = Object.keys(tabIdsData);
     if (!windows || windows.length <= 1) {
@@ -233,5 +263,42 @@ async function handledWindowMoveCmd(tabIdsData: TabData, command: WindowCommand)
     await browser.windows.update(Number(windows[newIndex]), { focused: true });
   } catch (error) {
     logger(`Error in handledWindowMoveCmd:`, error);
+  }
+}
+
+async function handledSearchCmd(
+  tabIdsData: TabData,
+  command: SearchCommand,
+  activeTabId: number,
+  activeWindowId: number
+): Promise<void> {
+  try {
+    const windowTabIds = tabIdsData[activeWindowId];
+
+    if (!windowTabIds || windowTabIds.length <= 1) {
+      return;
+    }
+
+    const currentTabIndex = windowTabIds.findIndex((t) => t.id === activeTabId);
+    if (currentTabIndex === -1) {
+      return;
+    }
+
+    switch (command) {
+      case "open_search":
+        await browser.scripting.executeScript({
+          target: { tabId: activeTabId },
+          files: [PATH_TO_CONTENT_SCRIPT]
+        });
+        break;
+        case "close_search":
+          await sendMessageToContentScript(activeTabId, { action: "closeSearchTab" });
+          break;
+      default:
+        return;
+    }
+
+  } catch (error) {
+    logger(`Error in handledSearchCmd:`, error);
   }
 }

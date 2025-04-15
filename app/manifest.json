@@ -4,7 +4,7 @@
   "description": "My Awesome ZenTab",
   "author": "Sonu Sharma",
   "manifest_version": 3,
-  "permissions": ["storage", "tabs", "activeTab", "scripting"],
+  "permissions": ["storage", "tabs", "activeTab", "scripting", "windows", "idle"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
@@ -24,14 +24,8 @@
   },
   "web_accessible_resources": [
     {
-      "resources": ["styles/*"],
+      "resources": ["styles/*", "images/*"],
       "matches": ["<all_urls>"]
-    }
-  ],
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["scripts/content.js"]
     }
   ],
   "commands": {
@@ -48,16 +42,22 @@
       "description": "move to previous tab"
     },
     "next_win": {
-      "suggested_key": {
-        "default": "Alt+W"
-      },
       "description": "move to next window"
     },
     "prev_win": {
+      "description": "move to previous window"
+    },
+    "open_search": {
       "suggested_key": {
         "default": "Alt+Q"
       },
-      "description": "move to previous window"
+      "description": "open tab search modal"
+    },
+    "close_search": {
+      "suggested_key": {
+        "default": "Alt+C"
+      },
+      "description": "close tab search modal"
     }
   }
 }
