@@ -1,0 +1,65 @@
+name: Build and Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Build Chrome extension
+        run: npm run build chrome
+        
+      - name: Build Firefox extension
+        run: npm run build firefox
+        
+      - name: Build Opera extension
+        run: npm run build opera
+        
+      - name: Build Edge extension
+        run: npm run build edge
+        
+      - name: Create combined zip
+        run: |
+          mkdir -p release
+          cp packages/chrome/*.zip release/
+          cp packages/firefox/*.xpi release/
+          cp packages/opera/*.zip release/
+          cp packages/edge/*.zip release/
+          cd release && zip -r ../zen-tab-${{ github.ref_name }}-all.zip *
+        
+      - name: Create release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            packages/chrome/*.zip
+            packages/firefox/*.xpi
+            packages/opera/*.zip
+            packages/edge/*.zip
+            zen-tab-${{ github.ref_name }}-all.zip
+          body: |
+            Release for version ${{ github.ref_name }}
+            
+            Built extensions for:
+            - Chrome
+            - Firefox
+            - Opera
+            - Edge
+            
+            Download the combined zip file for all browser versions.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
