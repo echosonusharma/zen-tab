@@ -25,9 +25,11 @@ document.addEventListener("visibilitychange", () => {
 });
 
 function TabComponent(tab: browser.Tabs.Tab) {
+  const imgUrl = tab.favIconUrl?.startsWith('chrome') ? defaultFavUrl : tab.favIconUrl;
+
   return (
     <Fragment>
-      <img src={tab.favIconUrl || defaultFavUrl} alt="favicon" className="tab-favicon" />
+      <img src={imgUrl || defaultFavUrl} alt="favicon" className="tab-favicon" />
       <span className="tab-title">{tab.title}</span>
     </Fragment>
   );

@@ -308,7 +308,7 @@ async function updateTabStores(tabQueryOptions: browser.Tabs.QueryQueryInfoType 
 async function getTabsInCurrentWindow(): Promise<browser.Tabs.Tab[]> {
   try {
     const tabs = await browser.tabs.query({ currentWindow: true });
-    return tabs;
+    return tabs.filter(({ url = "" }) => !['about:newtab', 'chrome://newtab/'].includes(url));
   } catch (error) {
     logger("failed to get current window tabs: ", error);
     return [];
