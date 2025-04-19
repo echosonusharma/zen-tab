@@ -36,20 +36,12 @@ jobs:
       - name: Build Edge extension
         run: npm run build edge
         
-      - name: Create combined zip
-        run: |
-          mkdir -p release
-          cp packages/*.zip release/
-          cp packages/*.xpi release/
-          cd release && zip -r ../zen-tab-${{ github.ref_name }}-all.zip *
-        
       - name: Create release
         uses: softprops/action-gh-release@v1
         with:
           files: |
             packages/*.zip
             packages/*.xpi
-            zen-tab-${{ github.ref_name }}-all.zip
           body: |
             Release for version ${{ github.ref_name }}
             
@@ -58,7 +50,5 @@ jobs:
             - Firefox
             - Opera
             - Edge
-            
-            Download the combined zip file for all browser versions.
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
