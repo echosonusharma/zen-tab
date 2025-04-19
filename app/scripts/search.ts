@@ -1,5 +1,10 @@
 import emojiRegex from "emoji-regex";
 import browser from "webextension-polyfill";
+import { TabInfo } from "./types";
+import { ld } from "./lev";
+import { normalizeString } from "./utils";
+
+let tabsWithKeywords: TabInfo[];
 
 const stopWords = new Set([
   "a",
@@ -126,14 +131,16 @@ const stopWords = new Set([
   "yourselves",
 ]);
 
+const wordsToIgnore = new Set(["www"]);
+
 function removeEmojis(text: string): string {
   const regex = emojiRegex();
   return text.replace(regex, "");
 }
 
-// todo: convert accented words into normal words for better search
 function cleanText(text: string): Array<string> {
   let cleaned = removeEmojis(text);
+  cleaned = normalizeString(text);
   cleaned = cleaned.toLowerCase();
 
   // split on non-word characters or spaces
@@ -146,16 +153,58 @@ function cleanText(text: string): Array<string> {
   return relevantWords;
 }
 
-function parseTabData(tabData: browser.Tabs.Tab) {
+function parseTabData(tabData: browser.Tabs.Tab): string[] {
   if (!tabData.title || !tabData.url) {
-    return;
+    return [];
   }
 
   const byTitle = cleanText(tabData.title);
-  const byUrl = new URL(tabData.url).hostname.split(".").slice(0, -1);
+  const byUrl = new URL(tabData.url).hostname
+    .split(".")
+    .slice(0, -1)
+    .filter((word) => !stopWords.has(word) && !wordsToIgnore.has(word));
   const data = [...new Set(byTitle.concat(byUrl))];
 
-  console.log(data);
+  return data;
 }
 
-export { parseTabData };
+function generateKeywordsForTabs(tabs: TabInfo[]): TabInfo[] {
+  const tabsClone = structuredClone(tabs);
+
+  tabsClone.forEach((tab) => {
+    tab.keywords = parseTabData(tab);
+  });
+
+  tabsWithKeywords = tabsClone;
+  return tabsClone;
+}
+
+function evaluateSearch(searchKeyword: string): TabInfo[] {
+  const sk = searchKeyword.toLowerCase();
+
+  for (let idx = 0; idx < tabsWithKeywords.length; idx++) {
+    const item = tabsWithKeywords[idx];
+    const keywords = item.keywords || ([] as string[]);
+    item.ld = Math.min(...keywords.map((w) => ld(sk, w)));
+    item.fts = Math.max(...keywords.map((w) => (w.toLowerCase().includes(sk) ? 1 : 0)));
+  }
+
+  tabsWithKeywords.sort((a, z) => {
+    const { ld: ldA = Infinity, fts: ftsA = 0 } = a;
+    const { ld: ldB = Infinity, fts: ftsB = 0 } = z;
+
+    if (ftsA !== ftsB) {
+      return ftsB - ftsA;
+    }
+
+    if (ftsA === 0 && ftsB === 0) {
+      return ldA - ldB;
+    }
+
+    return 0;
+  });
+
+  return tabsWithKeywords;
+}
+
+export { generateKeywordsForTabs, evaluateSearch };

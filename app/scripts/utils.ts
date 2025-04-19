@@ -21,7 +21,7 @@ export class Store {
       const data = await this.storageEngine.get(this.keyName);
       return data[this.keyName] as T;
     } catch (error) {
-      console.error(`Error getting data for key ${this.keyName}:`, error);
+      logger(`Error getting data for key ${this.keyName}:`, error);
       return undefined;
     }
   }
@@ -36,21 +36,21 @@ export class Store {
       await this.storageEngine.set({ [this.keyName]: data });
       return true;
     } catch (error) {
-      console.error(`Error setting data for key ${this.keyName}:`, error);
+      logger(`Error setting data for key ${this.keyName}:`, error);
       return false;
     }
   }
 }
 
-export function logger(message: string, ...args: any[]): void {
-  console.log("\x1b[95m%s\x1b[0m", "ZenTab:", message, ...args);
+export function logger(...args: any[]): void {
+  console.log("\x1b[95m%s\x1b[0m", "ZenTab:", ...args);
 }
 
 export async function broadcastMsgToServiceWorker(data: ExtensionMessage): Promise<any> {
   try {
     return await browser.runtime.sendMessage(data);
   } catch (err) {
-    console.warn("Service worker not available:", err);
+    logger("Service worker not available:", err);
     return null;
   }
 }
@@ -59,7 +59,23 @@ export async function sendMessageToContentScript(tabId: number, data: ExtensionM
   try {
     return await browser.tabs.sendMessage(tabId, data);
   } catch (err) {
-    console.error("Error sending message to content script:", err);
+    logger("Error sending message to content script:", err);
     return null;
   }
+}
+
+/**
+ * Removes diacritical marks (accents) from a string.
+ *
+ * @param {string} inputStr - The input string to normalize.
+ * @returns {string} - The normalized string.
+ *
+ * @example
+ * normalizeString('âé'); // returns 'ae'
+ */
+export function normalizeString(inputStr: string): string {
+  return String(inputStr)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '');
 }

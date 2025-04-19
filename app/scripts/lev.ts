@@ -1,6 +1,6 @@
 
 // https://en.wikipedia.org/wiki/Wagner%E2%80%93Fischer_algorithm
-function cal_ld(a: string, b: string) {
+export function ld(a: string, b: string) {
   const v_a = a.trim();
   const v_b = b.trim();
 

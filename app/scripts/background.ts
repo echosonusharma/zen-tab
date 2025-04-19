@@ -1,9 +1,8 @@
 import browser from "webextension-polyfill";
-import { ExtensionMessage, StoreType, TabData } from './types';
+import { ExtensionMessage, StoreType, TabData } from "./types";
 import { Store, logger, sendMessageToContentScript } from "./utils";
-// import { parseTabData } from "./search";
 
-const PATH_TO_CONTENT_SCRIPT = 'scripts/content.js';
+const PATH_TO_CONTENT_SCRIPT = "scripts/content.js";
 
 const TAB_COMMANDS = ["next_tab", "prev_tab"] as const;
 const WINDOW_COMMANDS = ["next_win", "prev_win"] as const;
@@ -13,7 +12,7 @@ type TabCommand = (typeof TAB_COMMANDS)[number];
 type WindowCommand = (typeof WINDOW_COMMANDS)[number];
 type SearchCommand = (typeof SEARCH_COMMANDS)[number];
 
-const tabsStore: Store = new Store("tabs", StoreType.LOCAL);
+const tabsStore: Store = new Store("tabs", StoreType.SESSION);
 
 const activeTabIdStore: Store = new Store("activeTabId", StoreType.SESSION);
 const activeWindowIdStore: Store = new Store("activeWindowId", StoreType.SESSION);
@@ -33,7 +32,7 @@ browser.windows.onRemoved.addListener(async (windowId: number) => {
       await tabsStore.set(tabsData);
     }
   } catch (error) {
-    logger(`Error in updateTabStores:`, error);
+    logger(`Error in windows onRemoved:`, error);
   }
 });
 
@@ -44,7 +43,7 @@ browser.windows.onCreated.addListener(async (window: browser.Windows.Window) => 
       await updateTabStores({ windowId: window.id });
     }
   } catch (error) {
-    logger(`Error in updateTabStores:`, error);
+    logger(`Error in windows onCreated:`, error);
   }
 });
 
@@ -52,12 +51,12 @@ browser.runtime.onInstalled.addListener(async () => await initWindowAndTabData()
 browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
 
 browser.idle.onStateChanged.addListener(async (newState) => {
-  if (newState === 'active') {
+  if (newState === "active") {
     const tabs = await browser.tabs.query({
       active: true,
       currentWindow: true,
     });
-  
+
     const tab = tabs[0];
 
     await activeTabIdStore.set(tab.id);
@@ -72,58 +71,20 @@ browser.runtime.onMessage.addListener(
       const activeWindowId = (await activeWindowIdStore.get()) as number;
       return activeWindowId;
     }
+    if (msg?.action === "switchToTab") {
+      await browser.tabs.update(msg.data.tabId, { active: true });
+      return true;
+    }
+    if (msg?.action === "getCurrentWindowTabs") {
+      const data = await getTabsInCurrentWindow();
+      return data;
+    }
   }
 );
 
-async function initWindowAndTabData(): Promise<void> {
-  const currentWindow = await browser.windows.getCurrent({});
-  if (currentWindow.id) {
-    await activeWindowIdStore.set(currentWindow.id);
-  }
-  await updateTabStores();
-}
-
-async function updateTabStores(tabQueryOptions: browser.Tabs.QueryQueryInfoType = {}): Promise<void> {
-  try {
-    const PData = await Promise.all([browser.tabs.query(tabQueryOptions), tabsStore.get()]);
-    const data: browser.Tabs.Tab[] = PData[0];
-
-    // console.log(data);
-    // data.forEach((x) => parseTabData(x));
-    const tabsData = PData[1] as TabData;
-
-    const activeTabId = data.find((t) => t.active === true)?.id as number;
-    await activeTabIdStore.set(activeTabId);
-
-    const tabsByWindowId: TabData = data.reduce((acc: TabData, curVal: browser.Tabs.Tab) => {
-      const tabWindowId = curVal.windowId;
-      if (!tabWindowId) {
-        return acc;
-      }
-
-      if (acc[tabWindowId]) {
-        acc[tabWindowId].push(curVal);
-      } else {
-        acc[tabWindowId] = [curVal];
-      }
-
-      return acc;
-    }, {});
-
-    if (tabsData) {
-      Object.assign(tabsData, tabsByWindowId);
-      await tabsStore.set(tabsData);
-    } else {
-      await tabsStore.set(tabsByWindowId);
-    }
-  } catch (error) {
-    logger(`Error in updateTabStores:`, error);
-  }
-}
-
 browser.tabs.onCreated.addListener(async (tab: browser.Tabs.Tab) => {
   try {
-    if (!tab.windowId) {
+    if (!tab.windowId || !tab.id) {
       return;
     }
 
@@ -133,8 +94,7 @@ browser.tabs.onCreated.addListener(async (tab: browser.Tabs.Tab) => {
       tabsData[tab.windowId] = [];
     }
 
-    tabsData[tab.windowId].splice(tab.index, 0, tab);
-
+    tabsData[tab.windowId].splice(tab.index, 0, tab.id);
     await tabsStore.set(tabsData);
   } catch (error) {
     logger(`Error in onCreated tab:`, error);
@@ -144,15 +104,15 @@ browser.tabs.onCreated.addListener(async (tab: browser.Tabs.Tab) => {
 browser.tabs.onMoved.addListener(async (tabId: number, moveInfo: browser.Tabs.OnMovedMoveInfoType) => {
   try {
     const tabsData = (await tabsStore.get()) as TabData;
-    const windowTabs = tabsData[moveInfo.windowId];
+    const windowTabIds = tabsData[moveInfo.windowId];
 
-    if (!windowTabs) return;
+    if (!windowTabIds) return;
 
-    const tabIndex = windowTabs.findIndex((t) => t.id === tabId);
+    const tabIndex = windowTabIds.findIndex((id) => id === tabId);
     if (tabIndex === -1) return;
 
-    const [movedTab] = windowTabs.splice(tabIndex, 1);
-    windowTabs.splice(moveInfo.toIndex, 0, movedTab);
+    const [movedTabId] = windowTabIds.splice(tabIndex, 1);
+    windowTabIds.splice(moveInfo.toIndex, 0, movedTabId);
 
     await tabsStore.set(tabsData);
   } catch (error) {
@@ -165,7 +125,7 @@ browser.tabs.onRemoved.addListener(async (tabId: number, removeInfo: browser.Tab
     const tabsData = (await tabsStore.get()) as TabData;
 
     if (tabsData[removeInfo.windowId]) {
-      tabsData[removeInfo.windowId] = tabsData[removeInfo.windowId].filter((tab) => tab.id !== tabId);
+      tabsData[removeInfo.windowId] = tabsData[removeInfo.windowId].filter((id) => id !== tabId);
       await tabsStore.set(tabsData);
     }
   } catch (error) {
@@ -209,7 +169,7 @@ async function handledTabMoveCmd(
       return;
     }
 
-    const currentTabIndex = windowTabIds.findIndex((t) => t.id === activeTabId);
+    const currentTabIndex = windowTabIds.findIndex((id) => id === activeTabId);
     if (currentTabIndex === -1) {
       return;
     }
@@ -226,7 +186,7 @@ async function handledTabMoveCmd(
         return;
     }
 
-    await browser.tabs.update(windowTabIds[newIndex].id, { active: true });
+    await browser.tabs.update(windowTabIds[newIndex], { active: true });
   } catch (error) {
     logger(`Error in handledTabMoveCmd:`, error);
   }
@@ -279,7 +239,7 @@ async function handledSearchCmd(
       return;
     }
 
-    const currentTabIndex = windowTabIds.findIndex((t) => t.id === activeTabId);
+    const currentTabIndex = windowTabIds.findIndex((id) => id === activeTabId);
     if (currentTabIndex === -1) {
       return;
     }
@@ -288,17 +248,69 @@ async function handledSearchCmd(
       case "open_search":
         await browser.scripting.executeScript({
           target: { tabId: activeTabId },
-          files: [PATH_TO_CONTENT_SCRIPT]
+          files: [PATH_TO_CONTENT_SCRIPT],
         });
         break;
-        case "close_search":
-          await sendMessageToContentScript(activeTabId, { action: "closeSearchTab" });
-          break;
+      case "close_search":
+        await sendMessageToContentScript(activeTabId, { action: "closeSearchTab" });
+        break;
       default:
         return;
     }
-
   } catch (error) {
     logger(`Error in handledSearchCmd:`, error);
+  }
+}
+
+async function initWindowAndTabData(): Promise<void> {
+  const currentWindow = await browser.windows.getCurrent({});
+  if (currentWindow.id) {
+    await activeWindowIdStore.set(currentWindow.id);
+  }
+  await updateTabStores();
+}
+
+async function updateTabStores(tabQueryOptions: browser.Tabs.QueryQueryInfoType = {}): Promise<void> {
+  try {
+    const PData = await Promise.all([browser.tabs.query(tabQueryOptions), tabsStore.get()]);
+    const data: browser.Tabs.Tab[] = PData[0];
+    const tabsData = PData[1] as TabData;
+
+    const activeTabId = data.find((t) => t.active === true)?.id as number;
+    await activeTabIdStore.set(activeTabId);
+
+    const tabsByWindowId: TabData = data.reduce((acc: TabData, curVal: browser.Tabs.Tab) => {
+      const tabWindowId = curVal.windowId;
+      if (!tabWindowId) {
+        return acc;
+      }
+
+      if (acc[tabWindowId]) {
+        acc[tabWindowId].push(curVal.id as number);
+      } else {
+        acc[tabWindowId] = [curVal.id as number];
+      }
+
+      return acc;
+    }, {});
+
+    if (tabsData) {
+      Object.assign(tabsData, tabsByWindowId);
+      await tabsStore.set(tabsData);
+    } else {
+      await tabsStore.set(tabsByWindowId);
+    }
+  } catch (error) {
+    logger(`Error in updateTabStores:`, error);
+  }
+}
+
+async function getTabsInCurrentWindow(): Promise<browser.Tabs.Tab[]> {
+  try {
+    const tabs = await browser.tabs.query({ currentWindow: true });
+    return tabs;
+  } catch (error) {
+    logger("failed to get current window tabs: ", error);
+    return [];
   }
 }
