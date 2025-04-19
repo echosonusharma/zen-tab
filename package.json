@@ -6,7 +6,6 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "webextension-toolbox build",
-    "postbuild": "bash ./scripts/unpack_zip.sh",
     "dev": "webextension-toolbox dev"
   },
   "keywords": [],

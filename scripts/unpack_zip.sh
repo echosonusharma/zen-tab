@@ -1,4 +1,5 @@
 #!/bin/bash
+# bash ./scripts/unpack_zip.sh
 
 unpack_path='packages/unpacked'
 
