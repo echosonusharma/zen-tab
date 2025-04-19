@@ -36,20 +36,16 @@ jobs:
       - name: Create combined zip
         run: |
           mkdir -p release
-          cp packages/chrome/*.zip release/
-          cp packages/firefox/*.xpi release/
-          cp packages/opera/*.zip release/
-          cp packages/edge/*.zip release/
+          cp packages/*.zip release/
+          cp packages/*.xpi release/
           cd release && zip -r ../zen-tab-${{ github.ref_name }}-all.zip *
         
       - name: Create release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            packages/chrome/*.zip
-            packages/firefox/*.xpi
-            packages/opera/*.zip
-            packages/edge/*.zip
+            packages/*.zip
+            packages/*.xpi
             zen-tab-${{ github.ref_name }}-all.zip
           body: |
             Release for version ${{ github.ref_name }}
