@@ -2,7 +2,7 @@ import { h, Fragment } from "preact";
 import { render } from "preact";
 import browser from "webextension-polyfill";
 import { useEffect, useState, useRef } from "preact/hooks";
-import { Store, broadcastMsgToServiceWorker } from "./utils";
+import { Store, broadcastMsgToServiceWorker, logger } from "./utils";
 import { ExtensionMessage, StoreType } from "./types";
 import { generateKeywordsForTabs, evaluateSearch } from "./search";
 
@@ -25,7 +25,23 @@ document.addEventListener("visibilitychange", () => {
 });
 
 function TabComponent(tab: browser.Tabs.Tab) {
-  const imgUrl = tab.favIconUrl?.startsWith('chrome') ? defaultFavUrl : tab.favIconUrl;
+  let imgUrl = defaultFavUrl;
+
+  if (tab.favIconUrl) {
+    try {
+      const favURL = new URL(tab.favIconUrl);
+      const invalidProtocols = ["chrome:", "about:"];
+      const isInvalid = invalidProtocols.includes(favURL.protocol) || ["localhost"].includes(favURL.hostname);
+      if (!isInvalid) {
+        imgUrl = tab.favIconUrl;
+      }
+    } catch (e) {
+      logger("Invalid URL format, fallback to default");
+      imgUrl = defaultFavUrl;
+    }
+  } else {
+    imgUrl = tab.favIconUrl as string;
+  }
 
   return (
     <Fragment>
@@ -83,6 +99,7 @@ function ContentApp() {
   const handleSearch = (e: Event) => {
     const target = e.target as HTMLInputElement;
     setSearchQuery(target.value);
+    e.stopPropagation();
   };
 
   const handleTabClick = async (tab: browser.Tabs.Tab) => {
@@ -110,6 +127,8 @@ function ContentApp() {
         }
         break;
     }
+
+    e.stopPropagation();
   };
 
   return (

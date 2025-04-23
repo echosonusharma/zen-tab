@@ -17,6 +17,9 @@ const tabsStore: Store = new Store("tabs", StoreType.SESSION);
 const activeTabIdStore: Store = new Store("activeTabId", StoreType.SESSION);
 const activeWindowIdStore: Store = new Store("activeWindowId", StoreType.SESSION);
 
+const audioCaptureStore: Store = new Store("audioCapture", StoreType.LOCAL);
+const searchTabStore: Store = new Store("searchTab", StoreType.LOCAL);
+
 browser.windows.onFocusChanged.addListener(async (windowId: number) => {
   if (windowId && windowId !== -1) {
     await activeWindowIdStore.set(windowId);
@@ -47,7 +50,12 @@ browser.windows.onCreated.addListener(async (window: browser.Windows.Window) => 
   }
 });
 
-browser.runtime.onInstalled.addListener(async () => await initWindowAndTabData());
+browser.runtime.onInstalled.addListener(async () => {
+  await initWindowAndTabData();
+  await audioCaptureStore.set(false);
+  await searchTabStore.set(true);
+});
+
 browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
 
 browser.idle.onStateChanged.addListener(async (newState) => {
@@ -308,7 +316,7 @@ async function updateTabStores(tabQueryOptions: browser.Tabs.QueryQueryInfoType 
 async function getTabsInCurrentWindow(): Promise<browser.Tabs.Tab[]> {
   try {
     const tabs = await browser.tabs.query({ currentWindow: true });
-    return tabs.filter(({ url = "" }) => !['about:newtab', 'chrome://newtab/'].includes(url));
+    return tabs.filter(({ url = "" }) => !["about:newtab", "chrome://newtab/"].includes(url));
   } catch (error) {
     logger("failed to get current window tabs: ", error);
     return [];
