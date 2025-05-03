@@ -1,6 +1,9 @@
 import browser from "webextension-polyfill";
 import { ExtensionMessage, StoreType, TabData } from "./types";
 import { Store, logger, sendMessageToContentScript } from "./utils";
+import * as wasm from "ld-wasm-lib";
+
+wasm.greet("WebAssembly loaded");
 
 const PATH_TO_CONTENT_SCRIPT = "scripts/content.js";
 

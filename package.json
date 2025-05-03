@@ -5,17 +5,19 @@
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "webextension-toolbox build",
-    "dev": "webextension-toolbox dev",
-    "manifest": "node ./scripts/tag_to_manifest.js"
+    "build": "npm run build:wasm && webextension-toolbox build",
+    "dev": "npm run build:wasm && webextension-toolbox dev",
+    "manifest": "node ./scripts/tag_to_manifest.js",
+    "build:wasm": "cd ld-wasm-lib && wasm-pack build --target bundler"
   },
   "keywords": [],
   "author": "Sonu Sharma",
-  "license": "ISC",
+  "license": "UNLICENSED",
   "devDependencies": {
     "@types/chrome": "^0.0.313",
     "@types/webextension-polyfill": "^0.12.3",
     "@webextension-toolbox/webextension-toolbox": "^7.1.1",
+    "babel-loader": "^10.0.0",
     "css-loader": "^6.10.0",
     "style-loader": "^3.3.4",
     "ts-loader": "^9.5.1",
@@ -23,6 +25,7 @@
   },
   "dependencies": {
     "emoji-regex": "^10.4.0",
+    "ld-wasm-lib": "file:ld-wasm-lib/pkg",
     "preact": "^10.19.6",
     "webextension-polyfill": "^0.12.0"
   }

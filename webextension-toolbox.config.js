@@ -15,6 +15,10 @@ module.exports = {
       });
     }
 
+    config.experiments = {
+      asyncWebAssembly: true,
+    };
+
     return config;
   },
 };
