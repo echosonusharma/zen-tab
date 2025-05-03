@@ -3,8 +3,6 @@ import { ExtensionMessage, StoreType, TabData } from "./types";
 import { Store, logger, sendMessageToContentScript } from "./utils";
 import * as wasm from "ld-wasm-lib";
 
-wasm.greet("WebAssembly loaded");
-
 const PATH_TO_CONTENT_SCRIPT = "scripts/content.js";
 
 const TAB_COMMANDS = ["next_tab", "prev_tab"] as const;
@@ -53,13 +51,32 @@ browser.windows.onCreated.addListener(async (window: browser.Windows.Window) => 
   }
 });
 
-browser.runtime.onInstalled.addListener(async () => {
-  await initWindowAndTabData();
-  await audioCaptureStore.set(false);
-  await searchTabStore.set(true);
-});
+// Initialization function that handles all setup
+async function initializeExtension(): Promise<void> {
+  try {
+    logger('service worker init');
+    wasm.greet("wasm loaded!");
+    await initWindowAndTabData();
+    await audioCaptureStore.set(false);
+    await searchTabStore.set(true);
+    logger('initialization complete');
+  } catch (error) {
+    logger('Failed to initialize extension:', error);
+  }
+}
 
-browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
+// The commented event listeners don't work reliably with WASM
+// https://github.com/webpack/webpack/issues/19489
+// browser.runtime.onInstalled.addListener(async () => {
+//   await initWindowAndTabData();
+//   await audioCaptureStore.set(false);
+//   await searchTabStore.set(true);
+// });
+
+// browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
+
+// Manually invoke initialization
+initializeExtension();
 
 browser.idle.onStateChanged.addListener(async (newState) => {
   if (newState === "active") {
