@@ -54,14 +54,23 @@ browser.windows.onCreated.addListener(async (window: browser.Windows.Window) => 
 // Initialization function that handles all setup
 async function initializeExtension(): Promise<void> {
   try {
-    logger('service worker init');
+    logger("service worker init");
     wasm.greet("wasm loaded!");
     await initWindowAndTabData();
-    await audioCaptureStore.set(false);
-    await searchTabStore.set(true);
-    logger('initialization complete');
+
+    const currentAudioCapture = await audioCaptureStore.get();
+    if (currentAudioCapture === undefined) {
+      await audioCaptureStore.set(false);
+    }
+
+    const currentSearchTab = await searchTabStore.get();
+    if (currentSearchTab === undefined) {
+      await searchTabStore.set(true);
+    }
+
+    logger("initialization complete");
   } catch (error) {
-    logger('Failed to initialize extension:', error);
+    logger("Failed to initialize extension:", error);
   }
 }
 
