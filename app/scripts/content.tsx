@@ -6,25 +6,10 @@ import { Store, broadcastMsgToServiceWorker, logger } from "./utils";
 import { ExtensionMessage, StoreType } from "./types";
 import { generateKeywordsForTabs, evaluateSearch } from "./search";
 
-const defaultFavUrl = browser.runtime.getURL("images/tab.png");
-const searchTabStore: Store = new Store("searchTab", StoreType.LOCAL);
-const mainContainerSelector = "div[data-zen-tab-container]";
-
-browser.runtime.onMessage.addListener(async (message: unknown, _sender: browser.Runtime.MessageSender) => {
-  const msg = message as ExtensionMessage;
-  if (msg?.action === "closeSearchTab") {
-    handleClose();
-  }
-});
-
-// auto close when not visible
-document.addEventListener("visibilitychange", () => {
-  if (document.visibilityState !== "visible") {
-    handleClose();
-  }
-});
+var mainContainerSelector = "div[data-zen-tab-container]";
 
 function TabComponent(tab: browser.Tabs.Tab) {
+  const defaultFavUrl = browser.runtime.getURL("images/tab.png");
   let imgUrl = defaultFavUrl;
 
   if (tab.favIconUrl) {
@@ -178,6 +163,22 @@ function handleClose() {
   if (zenContainer) {
     return;
   }
+
+  const searchTabStore: Store = new Store("searchTab", StoreType.LOCAL);
+
+  browser.runtime.onMessage.addListener(async (message: unknown, _sender: browser.Runtime.MessageSender) => {
+    const msg = message as ExtensionMessage;
+    if (msg?.action === "closeSearchTab") {
+      handleClose();
+    }
+  });
+
+  // auto close when not visible
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible") {
+      handleClose();
+    }
+  });
 
   const searchTabInjection = (await searchTabStore.get()) as boolean;
   if (!searchTabInjection) {
