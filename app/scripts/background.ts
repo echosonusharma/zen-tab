@@ -1,7 +1,13 @@
 import browser from "webextension-polyfill";
 import { ExtensionMessage, StoreType, TabData } from "./types";
 import { Store, logger, sendMessageToContentScript } from "./utils";
-import * as wasm from "ld-wasm-lib";
+import initWasmModule, { greet } from "ld-wasm-lib";
+
+initWasmModule()
+  .then(() => {
+    greet("wasm module loaded");
+  })
+  .catch((e) => logger(`Error in wasm module init :`, e));
 
 const PATH_TO_CONTENT_SCRIPT = "scripts/content.js";
 
@@ -51,41 +57,13 @@ browser.windows.onCreated.addListener(async (window: browser.Windows.Window) => 
   }
 });
 
-// Initialization function that handles all setup
-async function initializeExtension(): Promise<void> {
-  try {
-    logger("service worker init");
-    wasm.greet("wasm loaded!");
-    await initWindowAndTabData();
+browser.runtime.onInstalled.addListener(async () => {
+  await initWindowAndTabData();
+  await audioCaptureStore.set(false);
+  await searchTabStore.set(true);
+});
 
-    const currentAudioCapture = await audioCaptureStore.get();
-    if (currentAudioCapture === undefined) {
-      await audioCaptureStore.set(false);
-    }
-
-    const currentSearchTab = await searchTabStore.get();
-    if (currentSearchTab === undefined) {
-      await searchTabStore.set(true);
-    }
-
-    logger("initialization complete");
-  } catch (error) {
-    logger("Failed to initialize extension:", error);
-  }
-}
-
-// The commented event listeners don't work reliably with WASM
-// https://github.com/webpack/webpack/issues/19489
-// browser.runtime.onInstalled.addListener(async () => {
-//   await initWindowAndTabData();
-//   await audioCaptureStore.set(false);
-//   await searchTabStore.set(true);
-// });
-
-// browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
-
-// Manually invoke initialization
-initializeExtension();
+browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
 
 browser.idle.onStateChanged.addListener(async (newState) => {
   if (newState === "active") {

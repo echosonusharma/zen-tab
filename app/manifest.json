@@ -36,7 +36,8 @@
     {
       "resources": [
         "styles/*",
-        "images/*"
+        "images/*",
+        "*.wasm"
       ],
       "matches": [
         "<all_urls>"

@@ -15,8 +15,16 @@ module.exports = {
       });
     }
 
+    config.output = {
+      ...config.output,
+      module: true,
+      chunkFormat: 'module'
+    };
+
     config.experiments = {
+      ...config.experiments,
       asyncWebAssembly: true,
+      outputModule: true
     };
 
     return config;
