@@ -14,6 +14,8 @@ jobs:
     
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -44,6 +46,15 @@ jobs:
         
       - name: Build Edge extension
         run: npm run build edge
+
+      - name: Get commit messages
+        id: commits
+        run: |
+          PREV_TAG=$(git describe --tags --abbrev=0 ${{ github.ref_name }}^)
+          COMMITS=$(git log --pretty=format:"%s #%h" $PREV_TAG..${{ github.ref_name }})
+          echo "commits<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
         
       - name: Create release
         uses: softprops/action-gh-release@v1
@@ -59,5 +70,8 @@ jobs:
             - Firefox
             - Opera
             - Edge
+
+            Changes since last release:
+            ${{ steps.commits.outputs.commits }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
