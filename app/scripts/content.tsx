@@ -151,12 +151,30 @@ function ContentApp() {
   );
 }
 
+function visibilityListener() {
+  if (document.visibilityState !== "visible") {
+    handleClose();
+  }
+};
+
+function messageListener(message: unknown, _sender: browser.Runtime.MessageSender) {
+  const msg = message as ExtensionMessage;
+  if (msg?.action === "closeSearchTab") {
+    handleClose();
+  }
+};
+
 function handleClose() {
   const container = document.querySelector(mainContainerSelector);
   if (container) {
     container.remove();
+    document.removeEventListener("visibilitychange", visibilityListener);
+    browser.runtime.onMessage.removeListener(messageListener);
   }
 }
+
+browser.runtime.onMessage.addListener(messageListener);
+document.addEventListener("visibilitychange", visibilityListener);
 
 (async function () {
   const zenContainer = document.querySelector(mainContainerSelector);
@@ -165,20 +183,6 @@ function handleClose() {
   }
 
   const searchTabStore: Store = new Store("searchTab", StoreType.LOCAL);
-
-  browser.runtime.onMessage.addListener(async (message: unknown, _sender: browser.Runtime.MessageSender) => {
-    const msg = message as ExtensionMessage;
-    if (msg?.action === "closeSearchTab") {
-      handleClose();
-    }
-  });
-
-  // auto close when not visible
-  document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState !== "visible") {
-      handleClose();
-    }
-  });
 
   const searchTabInjection = (await searchTabStore.get()) as boolean;
   if (!searchTabInjection) {
