@@ -4,7 +4,6 @@ version = "0.1.0"
 edition = "2024"
 description = "A WebAssembly library for LD operations"
 repository = "https://github.com/echosonusharma/zen-tab/ld-wasm-lib"
-license = "UNLICENSED"
 
 [lib]
 crate-type = ["cdylib"]
