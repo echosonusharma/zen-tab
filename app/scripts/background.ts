@@ -287,11 +287,10 @@ async function initWindowAndTabData(): Promise<void> {
 
 async function updateTabStores(tabQueryOptions: browser.Tabs.QueryQueryInfoType = {}): Promise<void> {
   try {
-    const PData = await Promise.all([browser.tabs.query(tabQueryOptions), tabsStore.get()]);
+    const PData = await Promise.all([browser.tabs.query(tabQueryOptions), tabsStore.get(), browser.tabs.query({ active: true, currentWindow: true })]);
     const data: browser.Tabs.Tab[] = PData[0];
     const tabsData = PData[1] as TabData;
-
-    const activeTabId = data.find((t) => t.active === true)?.id as number;
+    const activeTabId = PData[2][0]['id'] as number;
     await activeTabIdStore.set(activeTabId);
 
     const tabsByWindowId: TabData = data.reduce((acc: TabData, curVal: browser.Tabs.Tab) => {
