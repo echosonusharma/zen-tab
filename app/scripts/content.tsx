@@ -9,28 +9,9 @@ import { generateKeywordsForTabs, evaluateSearch } from "./search";
 var mainContainerSelector = "div[data-zen-tab-container]";
 
 function TabComponent(tab: browser.Tabs.Tab) {
-  const defaultFavUrl = browser.runtime.getURL("images/tab.png");
-  let imgUrl = defaultFavUrl;
-
-  if (tab.favIconUrl) {
-    try {
-      const favURL = new URL(tab.favIconUrl);
-      const invalidProtocols = ["chrome:", "about:"];
-      const isInvalid = invalidProtocols.includes(favURL.protocol) || ["localhost"].includes(favURL.hostname);
-      if (!isInvalid) {
-        imgUrl = tab.favIconUrl;
-      }
-    } catch (e) {
-      logger("Invalid URL format, fallback to default");
-      imgUrl = defaultFavUrl;
-    }
-  } else {
-    imgUrl = tab.favIconUrl as string;
-  }
-
   return (
     <Fragment>
-      <img src={imgUrl || defaultFavUrl} alt="favicon" className="tab-favicon" />
+      <img src={tab.favIconUrl} onError={(e) => (e.currentTarget.src = browser.runtime.getURL("images/tab.png"))} alt="favicon" className="tab-favicon" />
       <span className="tab-title">{tab.title}</span>
     </Fragment>
   );
@@ -155,21 +136,21 @@ function visibilityListener() {
   if (document.visibilityState !== "visible") {
     handleClose();
   }
-};
+}
 
 function messageListener(message: unknown, _sender: browser.Runtime.MessageSender) {
   const msg = message as ExtensionMessage;
   if (msg?.action === "closeSearchTab") {
     handleClose();
   }
-};
+}
 
 function handleClose() {
   const container = document.querySelector(mainContainerSelector);
   if (container) {
-    container.remove();
     document.removeEventListener("visibilitychange", visibilityListener);
     browser.runtime.onMessage.removeListener(messageListener);
+    container.remove();
   }
 }
 
