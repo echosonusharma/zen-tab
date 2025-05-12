@@ -10,6 +10,7 @@ initWasmModule()
   .catch((e) => logger(`Error in wasm module init :`, e));
 
 const PATH_TO_CONTENT_SCRIPT = "scripts/content.js";
+const PATH_TO_READER_SCRIPT = "scripts/reader.js";
 
 const TAB_COMMANDS = ["next_tab", "prev_tab"] as const;
 const WINDOW_COMMANDS = ["next_win", "prev_win"] as const;
@@ -61,9 +62,35 @@ browser.runtime.onInstalled.addListener(async () => {
   await initWindowAndTabData();
   await audioCaptureStore.set(false);
   await searchTabStore.set(true);
+
+  browser.contextMenus.create({
+    id: "readerContextMenu",
+    title: "Zen-Tab Reader",
+    contexts: ["page"],
+  });
 });
 
 browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
+
+browser.contextMenus.onClicked.addListener(async (info, tab) => {
+  console.log("browser.contextMenus.onClicked", info, tab);
+
+  if (!tab) {
+    return;
+  }
+
+  const currentTabId = tab.id as number;
+
+  switch (info.menuItemId) {
+    case "readerContextMenu": {
+      await browser.scripting.executeScript({
+        target: { tabId: currentTabId },
+        files: [PATH_TO_READER_SCRIPT],
+      });
+      break;
+    }
+  }
+});
 
 browser.idle.onStateChanged.addListener(async (newState) => {
   if (newState === "active") {
@@ -265,6 +292,7 @@ async function handledSearchCmd(
           target: { tabId: activeTabId },
           files: [PATH_TO_CONTENT_SCRIPT],
         });
+
         break;
       case "close_search":
         await sendMessageToContentScript(activeTabId, { action: "closeSearchTab" });
@@ -287,10 +315,14 @@ async function initWindowAndTabData(): Promise<void> {
 
 async function updateTabStores(tabQueryOptions: browser.Tabs.QueryQueryInfoType = {}): Promise<void> {
   try {
-    const PData = await Promise.all([browser.tabs.query(tabQueryOptions), tabsStore.get(), browser.tabs.query({ active: true, currentWindow: true })]);
+    const PData = await Promise.all([
+      browser.tabs.query(tabQueryOptions),
+      tabsStore.get(),
+      browser.tabs.query({ active: true, currentWindow: true }),
+    ]);
     const data: browser.Tabs.Tab[] = PData[0];
     const tabsData = PData[1] as TabData;
-    const activeTabId = PData[2][0]['id'] as number;
+    const activeTabId = PData[2][0]["id"] as number;
     await activeTabIdStore.set(activeTabId);
 
     const tabsByWindowId: TabData = data.reduce((acc: TabData, curVal: browser.Tabs.Tab) => {
