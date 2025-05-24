@@ -2,16 +2,20 @@ import { h, Fragment } from "preact";
 import { render } from "preact";
 import browser from "webextension-polyfill";
 import { useEffect, useState, useRef } from "preact/hooks";
-import { Store, broadcastMsgToServiceWorker, logger } from "./utils";
-import { ExtensionMessage, StoreType } from "./types";
-import { generateKeywordsForTabs, evaluateSearch } from "./search";
+import { Store, broadcastMsgToServiceWorker } from "./utils";
+import { ExtensionMessage, StoreType, TabInfo } from "./types";
 
 var mainContainerSelector = "div[data-zen-tab-container]";
 
-function TabComponent(tab: browser.Tabs.Tab) {
+function TabComponent(tab: TabInfo) {
   return (
     <Fragment>
-      <img src={tab.favIconUrl} onError={(e) => (e.currentTarget.src = browser.runtime.getURL("images/tab.png"))} alt="favicon" className="tab-favicon" />
+      <img
+        src={tab.favIconUrl}
+        onError={(e) => (e.currentTarget.src = browser.runtime.getURL("images/tab.png"))}
+        alt="favicon"
+        className="tab-favicon"
+      />
       <span className="tab-title">{tab.title}</span>
     </Fragment>
   );
@@ -19,8 +23,8 @@ function TabComponent(tab: browser.Tabs.Tab) {
 
 function ContentApp() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [tabs, setTabs] = useState<browser.Tabs.Tab[]>([]);
-  const [filteredTabs, setFilteredTabs] = useState<browser.Tabs.Tab[]>([]);
+  const [tabs, setTabs] = useState<TabInfo[]>([]);
+  const [filteredTabs, setFilteredTabs] = useState<TabInfo[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLUListElement>(null);
@@ -30,9 +34,8 @@ function ContentApp() {
 
     const fetchTabs = async () => {
       try {
-        const tabs = (await broadcastMsgToServiceWorker({ action: "getCurrentWindowTabs" })) as browser.Tabs.Tab[];
+        const tabs = (await broadcastMsgToServiceWorker({ action: "getCurrentWindowTabs" })) as TabInfo[];
         setTabs(tabs);
-        generateKeywordsForTabs(tabs);
       } catch (error) {
         console.error("Error fetching tabs:", error);
       }
@@ -45,8 +48,15 @@ function ContentApp() {
     if (searchQuery.trim() === "") {
       setFilteredTabs(tabs);
     } else {
-      const sortedBySearchTabs = evaluateSearch(searchQuery);
-      setFilteredTabs(sortedBySearchTabs);
+      broadcastMsgToServiceWorker({
+        action: "orderTabsBySearchKeyword",
+        data: { searchKeyword: searchQuery, tabs: tabs },
+      })
+        .then((res) => {
+          const sortedTabs = res as TabInfo[];
+          setFilteredTabs(sortedTabs);
+        })
+        .catch((e) => console.log("search error", e));
     }
     // Reset selected index when filtered results change
     setSelectedIndex(0);
@@ -68,7 +78,7 @@ function ContentApp() {
     e.stopPropagation();
   };
 
-  const handleTabClick = async (tab: browser.Tabs.Tab) => {
+  const handleTabClick = async (tab: TabInfo) => {
     const tabId = tab.id as number;
     await broadcastMsgToServiceWorker({ action: "switchToTab", data: { tabId } });
     handleClose();

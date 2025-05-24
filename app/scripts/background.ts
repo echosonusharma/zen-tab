@@ -1,13 +1,13 @@
 import browser from "webextension-polyfill";
-import { ExtensionMessage, StoreType, TabData } from "./types";
+import { ExtensionMessage, StoreType, TabData, TabInfo } from "./types";
 import { Store, logger, sendMessageToContentScript } from "./utils";
-import initWasmModule, { greet } from "ld-wasm-lib";
+import initWasmModule, { init_wasm, generate_keyword_for_tab, ld } from "ld-wasm-lib";
 
 initWasmModule()
   .then(() => {
-    greet("wasm module loaded");
+    init_wasm("wasm module loaded");
   })
-  .catch((e) => logger(`Error in wasm module init :`, e));
+  .catch((e) => console.debug(`Error in wasm module init :`, e));
 
 const PATH_TO_CONTENT_SCRIPT = "scripts/content.js";
 const PATH_TO_READER_SCRIPT = "scripts/reader.js";
@@ -73,8 +73,6 @@ browser.runtime.onInstalled.addListener(async () => {
 browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
 
 browser.contextMenus.onClicked.addListener(async (info, tab) => {
-  console.log("browser.contextMenus.onClicked", info, tab);
-
   if (!tab) {
     return;
   }
@@ -120,6 +118,10 @@ browser.runtime.onMessage.addListener(
     if (msg?.action === "getCurrentWindowTabs") {
       const data = await getTabsInCurrentWindow();
       return data;
+    }
+    if (msg?.action === "orderTabsBySearchKeyword") {
+      const sortedTabs = orderTabsBySearchKeyword(msg.data.searchKeyword, msg.data.tabs);
+      return sortedTabs;
     }
   }
 );
@@ -322,8 +324,14 @@ async function updateTabStores(tabQueryOptions: browser.Tabs.QueryQueryInfoType 
     ]);
     const data: browser.Tabs.Tab[] = PData[0];
     const tabsData = PData[1] as TabData;
-    const activeTabId = PData[2][0]["id"] as number;
-    await activeTabIdStore.set(activeTabId);
+    const activeTabId = PData?.[2]?.[0]?.id;
+    if (activeTabId !== undefined) {
+      await activeTabIdStore.set(activeTabId);
+    } else {
+      const qTabs = await browser.tabs.query({ active: true, currentWindow: true });
+      const activeTab = qTabs[0];
+      await activeTabIdStore.set(activeTab.id);
+    }
 
     const tabsByWindowId: TabData = data.reduce((acc: TabData, curVal: browser.Tabs.Tab) => {
       const tabWindowId = curVal.windowId;
@@ -351,12 +359,46 @@ async function updateTabStores(tabQueryOptions: browser.Tabs.QueryQueryInfoType 
   }
 }
 
-async function getTabsInCurrentWindow(): Promise<browser.Tabs.Tab[]> {
+async function getTabsInCurrentWindow(): Promise<TabInfo[]> {
   try {
-    const tabs = await browser.tabs.query({ currentWindow: true });
-    return tabs.filter(({ url = "" }) => !["about:newtab", "chrome://newtab/"].includes(url));
+    let tabs = (await browser.tabs.query({ currentWindow: true })) as TabInfo[];
+    tabs = tabs.filter(({ url = "" }) => !["about:newtab", "chrome://newtab/"].includes(url));
+
+    for (let i = 0; i < tabs.length; i++) {
+      tabs[i].keywords = generate_keyword_for_tab(tabs[i].title, tabs[i].url);
+    }
+
+    return tabs;
   } catch (error) {
     logger("failed to get current window tabs: ", error);
     return [];
   }
+}
+
+function orderTabsBySearchKeyword(searchKeyword: string, tabs: TabInfo[]): TabInfo[] {
+  const sk = searchKeyword.toLowerCase();
+
+  for (let idx = 0; idx < tabs.length; idx++) {
+    const item = tabs[idx];
+    const keywords = item.keywords || ([] as string[]);
+    item.ld = Math.min(...keywords.map((w) => ld(sk, w)));
+    item.fts = Math.max(...keywords.map((w) => (w.toLowerCase().includes(sk) ? 1 : 0)));
+  }
+
+  tabs.sort((a, z) => {
+    const { ld: ldA = Infinity, fts: ftsA = 0 } = a;
+    const { ld: ldB = Infinity, fts: ftsB = 0 } = z;
+
+    if (ftsA !== ftsB) {
+      return ftsB - ftsA;
+    }
+
+    if (ftsA === 0 && ftsB === 0) {
+      return ldA - ldB;
+    }
+
+    return 0;
+  });
+
+  return tabs;
 }
