@@ -25,7 +25,6 @@
   },
   "dependencies": {
     "@mozilla/readability": "^0.6.0",
-    "emoji-regex": "^10.4.0",
     "ld-wasm-lib": "file:ld-wasm-lib/pkg",
     "preact": "^10.19.6",
     "webextension-polyfill": "^0.12.0"
