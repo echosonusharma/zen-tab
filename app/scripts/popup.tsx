@@ -41,7 +41,7 @@ function Popup() {
   return (
     <div class="app">
       <div class="toggle-container">
-        <div class="toggle-wrapper">
+        {/* <div class="toggle-wrapper">
           <span class="toggle-label">Audio Capture</span>
           <label class="toggle">
             <input
@@ -51,7 +51,7 @@ function Popup() {
             />
             <span class="toggle-slider"></span>
           </label>
-        </div>
+        </div> */}
         <div class="toggle-wrapper">
           <span class="toggle-label">Search Tab</span>
           <label class="toggle">
