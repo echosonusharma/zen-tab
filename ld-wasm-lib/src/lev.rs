@@ -6,8 +6,8 @@ pub fn ld(a: &str, b: &str) -> u32 {
     let a_str: &str = a.trim();
     let b_str: &str = b.trim();
 
-    let a_len: usize = a_str.len();
-    let b_len: usize = b_str.len();
+    let a_len: usize = a_str.chars().count();
+    let b_len: usize = b_str.chars().count();
 
     if a_len == 0 {
         return b_len as u32;
