@@ -13,8 +13,7 @@
     "activeTab",
     "scripting",
     "windows",
-    "idle",
-    "contextMenus"
+    "idle"
   ],
   "action": {
     "default_popup": "popup.html",
