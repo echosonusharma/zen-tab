@@ -1,15 +1,22 @@
 # ZenTab
 
-- move between tabs
-- tab search (fizzy search)
+**ZenTab** is a quick and simple tab manager for your browser.
+Easily switch between tabs and find the one you need using fuzzy search.
 
-## Install
+## Features
+
+* Move between open tabs effortlessly
+* Fuzzy search through tabs for fast access
+
+## Installation
 
 ```bash
-$ npm install
+npm install
 ```
 
 ## Development
+
+Run the extension in development mode for different browsers:
 
 ```bash
 npm run dev chrome
@@ -20,6 +27,8 @@ npm run dev edge
 
 ## Build
 
+Create a production build for your browser:
+
 ```bash
 npm run build chrome
 npm run build firefox
@@ -29,25 +38,17 @@ npm run build edge
 
 ## Release
 
-1. Commit all changes
+Create a release by running:
+
 ```bash
-git add .
-git commit -m "your commit message"
+npm run release
 ```
 
-2. Create and push tag
-```bash
-git tag vX.Y.Z
-git push origin vX.Y.Z
-```
+## Acknowledgements
 
-## Acnlowdgement
-
-- https://www.flaticon.com/free-icon/shortcut-script-app_3771467?term=shortcut&page=1&position=6&origin=search&related_id=3771467
-- https://www.flaticon.com/free-icon/tab_18743547?term=tab&page=1&position=62&origin=search&related_id=18743547
-- https://github.com/crittermike/shortkeys/tree/master
-- https://github.com/webextension-toolbox/webextension-toolbox
-- https://www.youtube.com/watch?v=Cu7Tl7FGigQ
-- https://appiconmaker.co/
----
-
+* [Shortcut Script App Icon](https://www.flaticon.com/free-icon/shortcut-script-app_3771467)
+* [Tab Icon](https://www.flaticon.com/free-icon/tab_18743547)
+* [Shortkeys Extension](https://github.com/crittermike/shortkeys)
+* [WebExtension Toolbox](https://github.com/webextension-toolbox/webextension-toolbox)
+* [Build a Chrome Extension (YouTube)](https://www.youtube.com/watch?v=Cu7Tl7FGigQ)
+* [App Icon Maker](https://appiconmaker.co/)
