@@ -10,7 +10,6 @@ initWasmModule()
   .catch((e) => console.debug(`Error in wasm module init :`, e));
 
 const PATH_TO_CONTENT_SCRIPT = "scripts/content.js";
-const PATH_TO_READER_SCRIPT = "scripts/reader.js";
 
 const TAB_COMMANDS = ["next_tab", "prev_tab"] as const;
 const WINDOW_COMMANDS = ["next_win", "prev_win"] as const;
@@ -62,33 +61,9 @@ browser.runtime.onInstalled.addListener(async () => {
   await initWindowAndTabData();
   await audioCaptureStore.set(false);
   await searchTabStore.set(true);
-
-  browser.contextMenus.create({
-    id: "readerContextMenu",
-    title: "Zen-Tab Reader",
-    contexts: ["page"],
-  });
 });
 
 browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
-
-browser.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (!tab) {
-    return;
-  }
-
-  const currentTabId = tab.id as number;
-
-  switch (info.menuItemId) {
-    case "readerContextMenu": {
-      await browser.scripting.executeScript({
-        target: { tabId: currentTabId },
-        files: [PATH_TO_READER_SCRIPT],
-      });
-      break;
-    }
-  }
-});
 
 browser.idle.onStateChanged.addListener(async (newState) => {
   if (newState === "active") {

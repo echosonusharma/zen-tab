@@ -8,7 +8,8 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "build": "npm run build:wasm && webextension-toolbox build",
     "dev": "npm run build:wasm && webextension-toolbox dev",
-    "manifest": "node ./scripts/tag_to_manifest.js",
+    "release": "node ./scripts/tag_to_manifest.js",
+    "unpack": "bash ./scripts/unpack_zip.sh",
     "build:wasm": "wasm-pack build ld-wasm-lib --target web"
   },
   "keywords": [],
@@ -19,12 +20,12 @@
     "@webextension-toolbox/webextension-toolbox": "^7.1.1",
     "babel-loader": "^10.0.0",
     "css-loader": "^6.10.0",
+    "semver": "^7.7.2",
     "style-loader": "^3.3.4",
     "ts-loader": "^9.5.1",
     "typescript": "^5.8.2"
   },
   "dependencies": {
-    "@mozilla/readability": "^0.6.0",
     "ld-wasm-lib": "file:ld-wasm-lib/pkg",
     "preact": "^10.19.6",
     "webextension-polyfill": "^0.12.0"
