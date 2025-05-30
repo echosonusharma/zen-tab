@@ -30,6 +30,7 @@ const PATH_TO_MANIFEST = './app/manifest.json';
     const tagName = `v${newVersion}`;
     execSync(`git add ${PATH_TO_MANIFEST}`);
     execSync(`git commit -m "release: bump version to ${newVersion}"`);
+    execSync(`git push origin`);
     execSync(`git tag ${tagName}`);
     execSync(`git push origin ${tagName}`);
     console.log('done!');
