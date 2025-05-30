@@ -1,7 +1,7 @@
 {
   "name": "zen-tab",
   "version": "1.0.0",
-  "description": "",
+  "description": "Quick and simple tab management",
   "main": "index.js",
   "type": "module",
   "scripts": {
