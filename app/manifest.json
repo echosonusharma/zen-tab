@@ -63,17 +63,11 @@
     "prev_win": {
       "description": "move to previous window"
     },
-    "open_search": {
+    "open_and_close_search": {
       "suggested_key": {
         "default": "Alt+Q"
       },
-      "description": "open tab search modal"
-    },
-    "close_search": {
-      "suggested_key": {
-        "default": "Alt+C"
-      },
-      "description": "close tab search modal"
+      "description": "open and close tab search modal"
     }
   }
 }

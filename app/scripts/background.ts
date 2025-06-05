@@ -13,7 +13,7 @@ const PATH_TO_CONTENT_SCRIPT = "scripts/content.js";
 
 const TAB_COMMANDS = ["next_tab", "prev_tab"] as const;
 const WINDOW_COMMANDS = ["next_win", "prev_win"] as const;
-const SEARCH_COMMANDS = ["open_search", "close_search"] as const;
+const SEARCH_COMMANDS = ["open_and_close_search"] as const;
 
 type TabCommand = (typeof TAB_COMMANDS)[number];
 type WindowCommand = (typeof WINDOW_COMMANDS)[number];
@@ -26,6 +26,7 @@ const activeWindowIdStore: Store = new Store("activeWindowId", StoreType.SESSION
 
 const audioCaptureStore: Store = new Store("audioCapture", StoreType.LOCAL);
 const searchTabStore: Store = new Store("searchTab", StoreType.LOCAL);
+const searchOpen: Store = new Store("searchOpen", StoreType.SESSION);
 
 browser.windows.onFocusChanged.addListener(async (windowId: number) => {
   if (windowId && windowId !== -1) {
@@ -59,8 +60,7 @@ browser.windows.onCreated.addListener(async (window: browser.Windows.Window) => 
 
 browser.runtime.onInstalled.addListener(async () => {
   await initWindowAndTabData();
-  await audioCaptureStore.set(false);
-  await searchTabStore.set(true);
+  await Promise.all([audioCaptureStore.set(false), searchTabStore.set(true), searchOpen.set(false)]);
 });
 
 browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
@@ -170,7 +170,7 @@ browser.commands.onCommand.addListener(async (command: string) => {
     await handledTabMoveCmd(tabIdsData, command as TabCommand, activeTabId, activeWindowId);
   } else if (["next_win", "prev_win"].includes(command)) {
     await handledWindowMoveCmd(tabIdsData, command as WindowCommand, activeWindowId);
-  } else if (["open_search", "close_search"].includes(command)) {
+  } else if (["open_and_close_search"].includes(command)) {
     await handledSearchCmd(tabIdsData, command as SearchCommand, activeTabId, activeWindowId);
   }
 });
@@ -264,15 +264,20 @@ async function handledSearchCmd(
     }
 
     switch (command) {
-      case "open_search":
-        await browser.scripting.executeScript({
-          target: { tabId: activeTabId },
-          files: [PATH_TO_CONTENT_SCRIPT],
-        });
+      case "open_and_close_search":
+        const open = await searchOpen.get();
 
-        break;
-      case "close_search":
-        await sendMessageToContentScript(activeTabId, { action: "closeSearchTab" });
+        if (open === true) {
+          await sendMessageToContentScript(activeTabId, { action: "closeSearchTab" });
+          await searchOpen.set(false);
+        } else {
+          await browser.scripting.executeScript({
+            target: { tabId: activeTabId },
+            files: [PATH_TO_CONTENT_SCRIPT],
+          });
+          await searchOpen.set(true);
+        }
+
         break;
       default:
         return;

@@ -6,11 +6,12 @@
   "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "build": "npm run build:wasm && webextension-toolbox build",
+    "build": "npm run build:wasm:release && webextension-toolbox build",
     "dev": "npm run build:wasm && webextension-toolbox dev",
     "release": "node ./scripts/tag_to_manifest.js",
     "unpack": "bash ./scripts/unpack_zip.sh",
-    "build:wasm": "wasm-pack build ld-wasm-lib --target web"
+    "build:wasm": "wasm-pack build ld-wasm-lib --target web",
+    "build:wasm:release": "wasm-pack build ld-wasm-lib --target web --release"
   },
   "keywords": [],
   "author": "Sonu Sharma",
