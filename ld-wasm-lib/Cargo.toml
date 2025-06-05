@@ -19,3 +19,10 @@ lto = true            # link-time optimization
 codegen-units = 1     # better optimization across units
 panic = "abort"       # smaller binary, faster
 strip = true          # remove symbols (Rust 1.60+)
+
+# configure wasm-pack/wasm-opt
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = ["-Oz", "--enable-bulk-memory"]
+
+[package.metadata.wasm-pack.profile.dev]
+wasm-opt = ["-O1", "--enable-bulk-memory"]

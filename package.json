@@ -11,7 +11,7 @@
     "release": "node ./scripts/tag_to_manifest.js",
     "unpack": "bash ./scripts/unpack_zip.sh",
     "build:wasm": "wasm-pack build ld-wasm-lib --target web",
-    "build:wasm:release": "WASMOPT='--enable-bulk-memory' wasm-pack build ld-wasm-lib --target web --release"
+    "build:wasm:release": "wasm-pack build ld-wasm-lib --target web --release"
   },
   "keywords": [],
   "author": "Sonu Sharma",
