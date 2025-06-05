@@ -37,10 +37,10 @@ jobs:
         
       - name: Install Binaryen (wasm-opt)
         run: |
-          curl -LO https://github.com/WebAssembly/binaryen/releases/latest/download/binaryen.tar.gz
+          curl -L -O https://github.com/WebAssembly/binaryen/releases/latest/download/binaryen.tar.gz
           tar -xzf binaryen.tar.gz
-          sudo cp binaryen/bin/* /usr/local/bin/  
-        
+          sudo cp binaryen/bin/* /usr/local/bin/
+
       - name: Build Chrome extension
         run: npm run build chrome
         
