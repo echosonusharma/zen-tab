@@ -170,6 +170,8 @@ document.addEventListener("visibilitychange", visibilityListener);
 (async function () {
   const zenContainer = document.querySelector(mainContainerSelector);
   if (zenContainer) {
+    // if search modal is already open then close it.
+    handleClose()
     return;
   }
 

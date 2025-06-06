@@ -26,7 +26,6 @@ const activeWindowIdStore: Store = new Store("activeWindowId", StoreType.SESSION
 
 const audioCaptureStore: Store = new Store("audioCapture", StoreType.LOCAL);
 const searchTabStore: Store = new Store("searchTab", StoreType.LOCAL);
-const searchOpen: Store = new Store("searchOpen", StoreType.SESSION);
 
 browser.windows.onFocusChanged.addListener(async (windowId: number) => {
   if (windowId && windowId !== -1) {
@@ -60,7 +59,7 @@ browser.windows.onCreated.addListener(async (window: browser.Windows.Window) => 
 
 browser.runtime.onInstalled.addListener(async () => {
   await initWindowAndTabData();
-  await Promise.all([audioCaptureStore.set(false), searchTabStore.set(true), searchOpen.set(false)]);
+  await Promise.all([audioCaptureStore.set(false), searchTabStore.set(true)]);
 });
 
 browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
@@ -265,18 +264,10 @@ async function handledSearchCmd(
 
     switch (command) {
       case "open_and_close_search":
-        const open = await searchOpen.get();
-
-        if (open === true) {
-          await sendMessageToContentScript(activeTabId, { action: "closeSearchTab" });
-          await searchOpen.set(false);
-        } else {
-          await browser.scripting.executeScript({
-            target: { tabId: activeTabId },
-            files: [PATH_TO_CONTENT_SCRIPT],
-          });
-          await searchOpen.set(true);
-        }
+        await browser.scripting.executeScript({
+          target: { tabId: activeTabId },
+          files: [PATH_TO_CONTENT_SCRIPT],
+        });
 
         break;
       default:
