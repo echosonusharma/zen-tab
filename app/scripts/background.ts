@@ -1,43 +1,69 @@
 import browser from "webextension-polyfill";
 import { ExtensionMessage, StoreType, TabData, TabInfo } from "./types";
-import { Store, logger, sendMessageToContentScript } from "./utils";
+import { Store, logger } from "./utils";
 import initWasmModule, { init_wasm, generate_keyword_for_tab, ld } from "ld-wasm-lib";
 
 initWasmModule()
   .then(() => {
-    init_wasm("wasm module loaded");
+    init_wasm("wasm module loaded successfully");
   })
-  .catch((e) => console.debug(`Error in wasm module init :`, e));
+  .catch((e: Error) => console.debug(`Error in wasm module init:`, e));
 
-const PATH_TO_CONTENT_SCRIPT = "scripts/content.js";
+const PATH_TO_CONTENT_SCRIPT: string = "scripts/content.js";
 
-const TAB_COMMANDS = ["next_tab", "prev_tab"] as const;
-const WINDOW_COMMANDS = ["next_win", "prev_win"] as const;
-const SEARCH_COMMANDS = ["open_and_close_search"] as const;
+type TabCommand = "next_tab" | "prev_tab";
+type WindowCommand = "next_win" | "prev_win";
 
-type TabCommand = (typeof TAB_COMMANDS)[number];
-type WindowCommand = (typeof WINDOW_COMMANDS)[number];
-type SearchCommand = (typeof SEARCH_COMMANDS)[number];
+const tabsStore: Store<TabData> = new Store("tabs", StoreType.SESSION);
+const activeTabIdStore: Store<number> = new Store("activeTabId", StoreType.SESSION);
+const activeWindowIdStore: Store<number> = new Store("activeWindowId", StoreType.SESSION);
+const searchTabStore: Store<boolean> = new Store("searchTab", StoreType.LOCAL);
 
-const tabsStore: Store = new Store("tabs", StoreType.SESSION);
+// Runtime Events
 
-const activeTabIdStore: Store = new Store("activeTabId", StoreType.SESSION);
-const activeWindowIdStore: Store = new Store("activeWindowId", StoreType.SESSION);
+browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
 
-const audioCaptureStore: Store = new Store("audioCapture", StoreType.LOCAL);
-const searchTabStore: Store = new Store("searchTab", StoreType.LOCAL);
+browser.runtime.onInstalled.addListener(async () => {
+  await initWindowAndTabData();
+  await searchTabStore.set(true);
+});
+
+browser.runtime.onMessage.addListener(
+  async (message: unknown, _sender: browser.Runtime.MessageSender): Promise<any> => {
+    const msg = message as ExtensionMessage;
+
+    switch (msg?.action) {
+      case "getCurrentWindowId":
+        return (await activeWindowIdStore.get()) as number;
+
+      case "switchToTab":
+        await browser.tabs.update(msg.data.tabId, { active: true });
+        return true;
+
+      case "getCurrentWindowTabs":
+        return await getTabsInCurrentWindow();
+
+      case "orderTabsBySearchKeyword":
+        return orderTabsBySearchKeyword(msg.data.searchKeyword, msg.data.tabs);
+
+      default:
+        return undefined;
+    }
+  }
+);
+
+// Window Events
 
 browser.windows.onFocusChanged.addListener(async (windowId: number) => {
-  if (windowId && windowId !== -1) {
+  if (windowId !== browser.windows.WINDOW_ID_NONE) {
     await activeWindowIdStore.set(windowId);
   }
 });
 
 browser.windows.onRemoved.addListener(async (windowId: number) => {
   try {
-    const tabsData = (await tabsStore.get()) as TabData;
-
-    if (tabsData[windowId]) {
+    const tabsData = await tabsStore.get();
+    if (tabsData?.[windowId]) {
       delete tabsData[windowId];
       await tabsStore.set(tabsData);
     }
@@ -48,7 +74,7 @@ browser.windows.onRemoved.addListener(async (windowId: number) => {
 
 browser.windows.onCreated.addListener(async (window: browser.Windows.Window) => {
   try {
-    if (window && window.id && window.id !== -1) {
+    if (window.id && window.id !== browser.windows.WINDOW_ID_NONE) {
       await activeWindowIdStore.set(window.id);
       await updateTabStores({ windowId: window.id });
     }
@@ -57,48 +83,15 @@ browser.windows.onCreated.addListener(async (window: browser.Windows.Window) => 
   }
 });
 
-browser.runtime.onInstalled.addListener(async () => {
-  await initWindowAndTabData();
-  await Promise.all([audioCaptureStore.set(false), searchTabStore.set(true)]);
-});
+// Tab Events
 
-browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
-
-browser.idle.onStateChanged.addListener(async (newState) => {
+browser.idle.onStateChanged.addListener(async (newState: browser.Idle.IdleState) => {
   if (newState === "active") {
-    const tabs = await browser.tabs.query({
-      active: true,
-      currentWindow: true,
-    });
-
-    const tab = tabs[0];
-
-    await activeTabIdStore.set(tab.id);
-    await activeWindowIdStore.set(tab.windowId);
+    // When waking up or returning to active state, re-initialize everything
+    // to ensure no tab/window events were missed during sleep.
+    await initWindowAndTabData();
   }
 });
-
-browser.runtime.onMessage.addListener(
-  async (message: unknown, _sender: browser.Runtime.MessageSender): Promise<any> => {
-    const msg = message as ExtensionMessage;
-    if (msg?.action === "getCurrentWindowId") {
-      const activeWindowId = (await activeWindowIdStore.get()) as number;
-      return activeWindowId;
-    }
-    if (msg?.action === "switchToTab") {
-      await browser.tabs.update(msg.data.tabId, { active: true });
-      return true;
-    }
-    if (msg?.action === "getCurrentWindowTabs") {
-      const data = await getTabsInCurrentWindow();
-      return data;
-    }
-    if (msg?.action === "orderTabsBySearchKeyword") {
-      const sortedTabs = orderTabsBySearchKeyword(msg.data.searchKeyword, msg.data.tabs);
-      return sortedTabs;
-    }
-  }
-);
 
 browser.tabs.onCreated.addListener(async (tab: browser.Tabs.Tab) => {
   try {
@@ -155,6 +148,8 @@ browser.tabs.onActivated.addListener(async (activeInfo: browser.Tabs.OnActivated
   await activeTabIdStore.set(activeInfo.tabId);
 });
 
+// Command Handler
+
 browser.commands.onCommand.addListener(async (command: string) => {
   const activeTabId = (await activeTabIdStore.get()) as number;
   const activeWindowId = (await activeWindowIdStore.get()) as number;
@@ -165,16 +160,24 @@ browser.commands.onCommand.addListener(async (command: string) => {
 
   const tabIdsData = (await tabsStore.get()) as TabData;
 
-  if (["next_tab", "prev_tab"].includes(command)) {
-    await handledTabMoveCmd(tabIdsData, command as TabCommand, activeTabId, activeWindowId);
-  } else if (["next_win", "prev_win"].includes(command)) {
-    await handledWindowMoveCmd(tabIdsData, command as WindowCommand, activeWindowId);
-  } else if (["open_and_close_search"].includes(command)) {
-    await handledSearchCmd(tabIdsData, command as SearchCommand, activeTabId, activeWindowId);
+  switch (command) {
+    case "next_tab":
+    case "prev_tab":
+      await handleTabMoveCmd(tabIdsData, command as TabCommand, activeTabId, activeWindowId);
+      break;
+    case "next_win":
+    case "prev_win":
+      await handleWindowMoveCmd(tabIdsData, command as WindowCommand, activeWindowId);
+      break;
+    case "open_and_close_search":
+      await handleSearchCmd(activeTabId);
+      break;
   }
 });
 
-async function handledTabMoveCmd(
+// Command Handlers
+
+async function handleTabMoveCmd(
   tabIdsData: TabData,
   command: TabCommand,
   activeTabId: number,
@@ -192,136 +195,93 @@ async function handledTabMoveCmd(
       return;
     }
 
-    let newIndex: number;
-    switch (command) {
-      case "next_tab":
-        newIndex = (currentTabIndex + 1) % windowTabIds.length;
-        break;
-      case "prev_tab":
-        newIndex = (currentTabIndex - 1 + windowTabIds.length) % windowTabIds.length;
-        break;
-      default:
-        return;
-    }
+    const direction = command === "next_tab" ? 1 : -1;
+    const newIndex = (currentTabIndex + direction + windowTabIds.length) % windowTabIds.length;
 
     await browser.tabs.update(windowTabIds[newIndex], { active: true });
   } catch (error) {
-    logger(`Error in handledTabMoveCmd:`, error);
+    logger(`Error in handleTabMoveCmd:`, error);
   }
 }
 
-async function handledWindowMoveCmd(
+async function handleWindowMoveCmd(
   tabIdsData: TabData,
   command: WindowCommand,
   activeWindowId: number
 ): Promise<void> {
   try {
-    const windows = Object.keys(tabIdsData);
-    if (!windows || windows.length <= 1) {
+    const windowIds = Object.keys(tabIdsData);
+    if (windowIds.length <= 1) {
       return;
     }
 
-    const currentWindowIndex = windows.findIndex((wId) => Number(wId) === activeWindowId);
+    const currentWindowIndex = windowIds.findIndex((wId) => Number(wId) === activeWindowId);
     if (currentWindowIndex === -1) {
       return;
     }
 
-    let newIndex: number;
-    switch (command) {
-      case "next_win":
-        newIndex = (currentWindowIndex + 1) % windows.length;
-        break;
-      case "prev_win":
-        newIndex = (currentWindowIndex - 1 + windows.length) % windows.length;
-        break;
-      default:
-        return;
-    }
+    const direction = command === "next_win" ? 1 : -1;
+    const newIndex = (currentWindowIndex + direction + windowIds.length) % windowIds.length;
 
-    await browser.windows.update(Number(windows[newIndex]), { focused: true });
+    await browser.windows.update(Number(windowIds[newIndex]), { focused: true });
   } catch (error) {
-    logger(`Error in handledWindowMoveCmd:`, error);
+    logger(`Error in handleWindowMoveCmd:`, error);
   }
 }
 
-async function handledSearchCmd(
-  tabIdsData: TabData,
-  command: SearchCommand,
-  activeTabId: number,
-  activeWindowId: number
-): Promise<void> {
+async function handleSearchCmd(activeTabId: number): Promise<void> {
   try {
-    const windowTabIds = tabIdsData[activeWindowId];
-
-    if (!windowTabIds || windowTabIds.length <= 1) {
-      return;
-    }
-
-    const currentTabIndex = windowTabIds.findIndex((id) => id === activeTabId);
-    if (currentTabIndex === -1) {
-      return;
-    }
-
-    switch (command) {
-      case "open_and_close_search":
-        await browser.scripting.executeScript({
-          target: { tabId: activeTabId },
-          files: [PATH_TO_CONTENT_SCRIPT],
-        });
-
-        break;
-      default:
-        return;
-    }
+    await browser.scripting.executeScript({
+      target: { tabId: activeTabId },
+      files: [PATH_TO_CONTENT_SCRIPT],
+    });
   } catch (error) {
-    logger(`Error in handledSearchCmd:`, error);
+    logger(`Error in handleSearchCmd:`, error);
   }
 }
+
+// Data Initialization
 
 async function initWindowAndTabData(): Promise<void> {
   const currentWindow = await browser.windows.getCurrent({});
+  logger("initWindowAndTabData", currentWindow);
+
   if (currentWindow.id) {
     await activeWindowIdStore.set(currentWindow.id);
   }
+
   await updateTabStores();
 }
 
 async function updateTabStores(tabQueryOptions: browser.Tabs.QueryQueryInfoType = {}): Promise<void> {
   try {
-    const PData = await Promise.all([
+    const [queriedTabs, existingTabsData, activeTabs] = await Promise.all([
       browser.tabs.query(tabQueryOptions),
       tabsStore.get(),
       browser.tabs.query({ active: true, currentWindow: true }),
     ]);
-    const data: browser.Tabs.Tab[] = PData[0];
-    const tabsData = PData[1] as TabData;
-    const activeTabId = PData?.[2]?.[0]?.id;
+
+    const activeTabId = activeTabs?.[0]?.id;
     if (activeTabId !== undefined) {
       await activeTabIdStore.set(activeTabId);
-    } else {
-      const qTabs = await browser.tabs.query({ active: true, currentWindow: true });
-      const activeTab = qTabs[0];
-      await activeTabIdStore.set(activeTab.id);
     }
 
-    const tabsByWindowId: TabData = data.reduce((acc: TabData, curVal: browser.Tabs.Tab) => {
-      const tabWindowId = curVal.windowId;
-      if (!tabWindowId) {
+    const tabsByWindowId = queriedTabs.reduce<TabData>((acc, tab) => {
+      if (!tab.windowId || tab.id === undefined) {
         return acc;
       }
 
-      if (acc[tabWindowId]) {
-        acc[tabWindowId].push(curVal.id as number);
-      } else {
-        acc[tabWindowId] = [curVal.id as number];
+      if (!acc[tab.windowId]) {
+        acc[tab.windowId] = [];
       }
+      acc[tab.windowId].push(tab.id);
 
       return acc;
     }, {});
 
-    if (tabsData) {
-      Object.assign(tabsData, tabsByWindowId);
-      await tabsStore.set(tabsData);
+    if (existingTabsData) {
+      Object.assign(existingTabsData, tabsByWindowId);
+      await tabsStore.set(existingTabsData);
     } else {
       await tabsStore.set(tabsByWindowId);
     }
@@ -330,18 +290,22 @@ async function updateTabStores(tabQueryOptions: browser.Tabs.QueryQueryInfoType 
   }
 }
 
+// Tab Query & Search
+
+const NEW_TAB_URLS = new Set(["about:newtab", "chrome://newtab/"]);
+
 async function getTabsInCurrentWindow(): Promise<TabInfo[]> {
   try {
-    let tabs = (await browser.tabs.query({ currentWindow: true })) as TabInfo[];
-    tabs = tabs.filter(({ url = "" }) => !["about:newtab", "chrome://newtab/"].includes(url));
+    const allTabs = (await browser.tabs.query({ currentWindow: true })) as TabInfo[];
+    const tabs = allTabs.filter(({ url = "" }) => !NEW_TAB_URLS.has(url));
 
-    for (let i = 0; i < tabs.length; i++) {
-      tabs[i].keywords = generate_keyword_for_tab(tabs[i].title, tabs[i].url);
+    for (const tab of tabs) {
+      tab.keywords = generate_keyword_for_tab(tab.title, tab.url);
     }
 
     return tabs;
   } catch (error) {
-    logger("failed to get current window tabs: ", error);
+    logger("Failed to get current window tabs:", error);
     return [];
   }
 }
@@ -349,26 +313,43 @@ async function getTabsInCurrentWindow(): Promise<TabInfo[]> {
 function orderTabsBySearchKeyword(searchKeyword: string, tabs: TabInfo[]): TabInfo[] {
   const sk = searchKeyword.toLowerCase();
 
-  for (let idx = 0; idx < tabs.length; idx++) {
-    const item = tabs[idx];
-    const keywords = item.keywords || ([] as string[]);
-    item.ld = Math.min(...keywords.map((w) => ld(sk, w)));
-    item.fts = Math.max(...keywords.map((w) => (w.toLowerCase().includes(sk) ? 1 : 0)));
+  if (!sk) return tabs;
+
+  for (const tab of tabs) {
+    const fullText = ((tab.title || "") + " " + (tab.url || "")).toLowerCase();
+    const matchIndex = fullText.indexOf(sk);
+
+    // 1. Check Full Substring Match First (FTS) against the whole title+url
+    if (matchIndex !== -1) {
+      tab.fts = 1;
+      tab.ld = 0; // Skip WASM entirely! Zero distance is perfect.
+      (tab as any).matchIndex = matchIndex;
+      continue;
+    }
+
+    // 2. Fallback to Levenshtein against keywords
+    const keywords = tab.keywords ?? [];
+    tab.fts = 0;
+    tab.ld = keywords.length > 0 ? Math.min(...keywords.map((w) => ld(sk, w.toLowerCase()))) : Infinity;
+    (tab as any).matchIndex = Infinity;
   }
 
-  tabs.sort((a, z) => {
-    const { ld: ldA = Infinity, fts: ftsA = 0 } = a;
-    const { ld: ldB = Infinity, fts: ftsB = 0 } = z;
+  tabs.sort((a, b) => {
+    const ftsA = a.fts ?? 0;
+    const ftsB = b.fts ?? 0;
 
+    // FTS matches always beat Levenshtein matches
     if (ftsA !== ftsB) {
       return ftsB - ftsA;
     }
 
-    if (ftsA === 0 && ftsB === 0) {
-      return ldA - ldB;
+    // If BOTH are FTS matches, rank by which match happens earlier in the string
+    if (ftsA === 1 && ftsB === 1) {
+      return (a as any).matchIndex - (b as any).matchIndex;
     }
 
-    return 0;
+    // If NEITHER are FTS matches, rank by Levenshtein distance
+    return (a.ld ?? Infinity) - (b.ld ?? Infinity);
   });
 
   return tabs;

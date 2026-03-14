@@ -2,183 +2,240 @@ import { h, Fragment } from "preact";
 import { render } from "preact";
 import browser from "webextension-polyfill";
 import { useEffect, useState, useRef } from "preact/hooks";
-import { Store, broadcastMsgToServiceWorker } from "./utils";
+import { broadcastMsgToServiceWorker, Store } from "./utils";
 import { ExtensionMessage, StoreType, TabInfo } from "./types";
 
-var mainContainerSelector = "div[data-zen-tab-container]";
+// Wrap everything in an IIFE to prevent "already declared" errors
+// when the content script is re-injected on each shortcut press.
+(async function () {
+  const CONTAINER_SELECTOR = "div[data-zen-tab-container]";
 
-function TabComponent(tab: TabInfo) {
-  return (
-    <Fragment>
-      <img
-        src={tab.favIconUrl}
-        onError={(e) => (e.currentTarget.src = browser.runtime.getURL("images/tab.png"))}
-        alt="favicon"
-        className="tab-favicon"
-      />
-      <span className="tab-title">{tab.title}</span>
-    </Fragment>
-  );
-}
+  // Components
 
-function ContentApp() {
-  const [searchQuery, setSearchQuery] = useState("");
-  const [tabs, setTabs] = useState<TabInfo[]>([]);
-  const [filteredTabs, setFilteredTabs] = useState<TabInfo[]>([]);
-  const [selectedIndex, setSelectedIndex] = useState(0);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const resultsRef = useRef<HTMLUListElement>(null);
+  function SearchIcon() {
+    return (
+      <svg
+        className="search-icon"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <circle cx="11" cy="11" r="8" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+    );
+  }
 
-  useEffect(() => {
-    searchInputRef.current?.focus();
+  function extractDomain(url?: string): string {
+    if (!url) return "";
+    try {
+      const parsed = new URL(url);
+      return parsed.hostname.replace(/^www\./, "");
+    } catch {
+      return url;
+    }
+  }
 
-    const fetchTabs = async () => {
-      try {
-        const tabs = (await broadcastMsgToServiceWorker({ action: "getCurrentWindowTabs" })) as TabInfo[];
-        setTabs(tabs);
-      } catch (error) {
-        console.error("Error fetching tabs:", error);
+  function TabComponent({ tab, isActive }: { tab: TabInfo; isActive: boolean }) {
+    return (
+      <Fragment>
+        <img
+          src={tab.favIconUrl}
+          onError={(e) => (e.currentTarget.src = browser.runtime.getURL("images/tab.png"))}
+          alt=""
+          className="tab-favicon"
+        />
+        <div className="tab-info">
+          <span className="tab-title">{tab.title}</span>
+          <span className="tab-url">{extractDomain(tab.url)}</span>
+        </div>
+      </Fragment>
+    );
+  }
+
+  function ContentApp() {
+    const [searchQuery, setSearchQuery] = useState("");
+    const [tabs, setTabs] = useState<TabInfo[]>([]);
+    const [filteredTabs, setFilteredTabs] = useState<TabInfo[]>([]);
+    const [selectedIndex, setSelectedIndex] = useState(0);
+    const searchInputRef = useRef<HTMLInputElement>(null);
+    const resultsRef = useRef<HTMLUListElement>(null);
+
+    useEffect(() => {
+      searchInputRef.current?.focus();
+
+      const fetchTabs = async () => {
+        try {
+          const tabs = (await broadcastMsgToServiceWorker({ action: "getCurrentWindowTabs" })) as TabInfo[];
+          setTabs(tabs);
+        } catch (error) {
+          console.error("Error fetching tabs:", error);
+        }
+      };
+
+      fetchTabs();
+    }, []);
+
+    useEffect(() => {
+      if (searchQuery.trim() === "") {
+        setFilteredTabs(tabs);
+      } else {
+        broadcastMsgToServiceWorker({
+          action: "orderTabsBySearchKeyword",
+          data: { searchKeyword: searchQuery, tabs },
+        })
+          .then((res) => setFilteredTabs(res as TabInfo[]))
+          .catch((e) => console.error("Search error:", e));
       }
+      setSelectedIndex(0);
+    }, [searchQuery, tabs]);
+
+    // Scroll selected item into view
+    useEffect(() => {
+      if (resultsRef.current && filteredTabs.length > 0) {
+        const selectedElement = resultsRef.current.children[selectedIndex] as HTMLElement;
+        selectedElement?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    }, [selectedIndex, filteredTabs]);
+
+    const handleSearch = (e: Event) => {
+      const target = e.target as HTMLInputElement;
+      setSearchQuery(target.value);
+      e.stopPropagation();
     };
 
-    fetchTabs();
-  }, []);
+    const handleTabClick = async (tab: TabInfo) => {
+      const tabId = tab.id as number;
+      await broadcastMsgToServiceWorker({ action: "switchToTab", data: { tabId } });
+      handleClose();
+    };
 
-  useEffect(() => {
-    if (searchQuery.trim() === "") {
-      setFilteredTabs(tabs);
-    } else {
-      broadcastMsgToServiceWorker({
-        action: "orderTabsBySearchKeyword",
-        data: { searchKeyword: searchQuery, tabs: tabs },
-      })
-        .then((res) => {
-          const sortedTabs = res as TabInfo[];
-          setFilteredTabs(sortedTabs);
-        })
-        .catch((e) => console.log("search error", e));
-    }
-    // Reset selected index when filtered results change
-    setSelectedIndex(0);
-  }, [searchQuery, tabs]);
+    const handleKeyDown = async (e: KeyboardEvent) => {
+      switch (e.key) {
+        case "Escape":
+          handleClose();
+          return;
 
-  // Scroll selected item into view
-  useEffect(() => {
-    if (resultsRef.current && filteredTabs.length > 0) {
-      const selectedElement = resultsRef.current.children[selectedIndex] as HTMLElement;
-      if (selectedElement) {
-        selectedElement.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        case "ArrowDown":
+          e.preventDefault();
+          setSelectedIndex((prev) => Math.min(prev + 1, filteredTabs.length - 1));
+          break;
+
+        case "ArrowUp":
+          e.preventDefault();
+          setSelectedIndex((prev) => Math.max(prev - 1, 0));
+          break;
+
+        case "Enter":
+          if (filteredTabs.length > 0) {
+            const selectedTab = filteredTabs[selectedIndex];
+            if (selectedTab) {
+              await handleTabClick(selectedTab);
+            }
+          }
+          break;
       }
-    }
-  }, [selectedIndex, filteredTabs]);
 
-  const handleSearch = (e: Event) => {
-    const target = e.target as HTMLInputElement;
-    setSearchQuery(target.value);
-    e.stopPropagation();
-  };
+      e.stopPropagation();
+    };
 
-  const handleTabClick = async (tab: TabInfo) => {
-    const tabId = tab.id as number;
-    await broadcastMsgToServiceWorker({ action: "switchToTab", data: { tabId } });
-    handleClose();
-  };
+    return (
+      <div id="zen-tab-content">
+        <div className="header">
+          <SearchIcon />
+          <input
+            ref={searchInputRef}
+            type="text"
+            className="search-input"
+            placeholder="Search tabs..."
+            value={searchQuery}
+            onInput={handleSearch}
+            onKeyDown={handleKeyDown}
+          />
+          <button className="close-button" onClick={handleClose}>
+            ×
+          </button>
+        </div>
 
-  const handleKeyDown = async (e: KeyboardEvent) => {
-    if (filteredTabs.length === 0) return;
+        {filteredTabs.length > 0 ? (
+          <Fragment>
+            <div className="tab-count">
+              {filteredTabs.length} tab{filteredTabs.length !== 1 ? "s" : ""}
+            </div>
+            <ul className="search-results" ref={resultsRef}>
+              {filteredTabs.map((tab, index) => (
+                <li
+                  key={tab.id}
+                  onClick={() => handleTabClick(tab)}
+                  className={[
+                    "tab-item",
+                    index === selectedIndex ? "selected" : "",
+                    tab.active ? "active-tab" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  <TabComponent tab={tab} isActive={!!tab.active} />
+                </li>
+              ))}
+            </ul>
+          </Fragment>
+        ) : (
+          <div className="no-results">No tabs found</div>
+        )}
 
-    switch (e.key) {
-      case "ArrowDown":
-        e.preventDefault();
-        setSelectedIndex((prev) => Math.min(prev + 1, filteredTabs.length - 1));
-        break;
-      case "ArrowUp":
-        e.preventDefault();
-        setSelectedIndex((prev) => Math.max(prev - 1, 0));
-        break;
-      case "Enter":
-        const selectedTab = filteredTabs[selectedIndex];
-        if (selectedTab) {
-          await handleTabClick(selectedTab);
-        }
-        break;
-    }
-
-    e.stopPropagation();
-  };
-
-  return (
-    <div id="zen-tab-content">
-      <div className="header">
-        <input
-          ref={searchInputRef}
-          type="text"
-          className="search-input"
-          placeholder="Search Tabs"
-          value={searchQuery}
-          onInput={handleSearch}
-          onKeyDown={handleKeyDown}
-        />
-        <button className="close-button" onClick={handleClose}>
-          ×
-        </button>
+        <div className="keyboard-hint">
+          <span><kbd>↑</kbd> <kbd>↓</kbd> navigate</span>
+          <span><kbd>↵</kbd> open</span>
+          <span><kbd>esc</kbd> close</span>
+        </div>
       </div>
-      {filteredTabs.length > 0 ? (
-        <ul className="search-results" ref={resultsRef}>
-          {filteredTabs.map((tab, index) => (
-            <li
-              key={tab.id}
-              onClick={() => handleTabClick(tab)}
-              className={`tab-item ${index === selectedIndex ? "selected" : ""}`}
-            >
-              {TabComponent(tab)}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <div className="no-results">No tabs found</div>
-      )}
-    </div>
-  );
-}
+    );
+  }
 
-function visibilityListener() {
-  if (document.visibilityState !== "visible") {
+  // Lifecycle Handlers
+
+  function visibilityListener() {
+    if (document.visibilityState !== "visible") {
+      handleClose();
+    }
+  }
+
+  function messageListener(message: unknown, _sender: browser.Runtime.MessageSender) {
+    const msg = message as ExtensionMessage;
+    if (msg?.action === "closeSearchTab") {
+      handleClose();
+    }
+  }
+
+  function handleClose() {
+    const container = document.querySelector(CONTAINER_SELECTOR);
+    if (container) {
+      document.removeEventListener("visibilitychange", visibilityListener);
+      browser.runtime.onMessage.removeListener(messageListener);
+      container.remove();
+    }
+  }
+
+  // Entry Point
+
+  browser.runtime.onMessage.addListener(messageListener);
+  document.addEventListener("visibilitychange", visibilityListener);
+
+  const existingContainer = document.querySelector(CONTAINER_SELECTOR);
+  if (existingContainer) {
     handleClose();
-  }
-}
-
-function messageListener(message: unknown, _sender: browser.Runtime.MessageSender) {
-  const msg = message as ExtensionMessage;
-  if (msg?.action === "closeSearchTab") {
-    handleClose();
-  }
-}
-
-function handleClose() {
-  const container = document.querySelector(mainContainerSelector);
-  if (container) {
-    document.removeEventListener("visibilitychange", visibilityListener);
-    browser.runtime.onMessage.removeListener(messageListener);
-    container.remove();
-  }
-}
-
-browser.runtime.onMessage.addListener(messageListener);
-document.addEventListener("visibilitychange", visibilityListener);
-
-(async function () {
-  const zenContainer = document.querySelector(mainContainerSelector);
-  if (zenContainer) {
-    // if search modal is already open then close it.
-    handleClose()
     return;
   }
 
-  const searchTabStore: Store = new Store("searchTab", StoreType.LOCAL);
-
-  const searchTabInjection = (await searchTabStore.get()) as boolean;
-  if (!searchTabInjection) {
+  const searchTabStore: Store<boolean> = new Store("searchTab", StoreType.LOCAL);
+  const searchTabEnabled = (await searchTabStore.get()) as boolean;
+  if (!searchTabEnabled) {
     return;
   }
 
@@ -186,174 +243,24 @@ document.addEventListener("visibilitychange", visibilityListener);
   container.setAttribute("data-zen-tab-container", "true");
   const shadowRoot = container.attachShadow({ mode: "open" });
 
-  // meh~
-  const style = document.createElement("style");
-  style.textContent = `
-    #zen-tab-content {
-      width: 600px !important;
-      height: 400px !important;
-      background: #1e1e1e !important;
-      padding: 30px !important;
-      border-radius: 12px !important;
-      box-shadow: 0 8px 30px rgba(0,0,0,0.3) !important;
-      position: fixed !important;
-      top: 50% !important;
-      left: 50% !important;
-      transform: translate(-50%, -50%) !important;
-      display: flex !important;
-      flex-direction: column !important;
-      justify-content: flex-start !important;
-      align-items: center !important;
-      z-index: 9999999999 !important;
-      color: #f5f5f5 !important;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif !important;
-      box-sizing: border-box !important;
-    }
+  // Load styles from external CSS file and wait for it
+  const cssUrl = browser.runtime.getURL("styles/content.css");
 
-    #zen-tab-content .header {
-      width: 95% !important;
-      display: flex !important;
-      align-items: center !important;
-      margin-bottom: 20px !important;
-      position: relative !important;
-      box-sizing: border-box !important;
-    }
+  try {
+    const response = await fetch(cssUrl);
+    const cssText = await response.text();
+    const styleTag = document.createElement("style");
+    styleTag.textContent = cssText;
+    shadowRoot.appendChild(styleTag);
+  } catch (err) {
+    console.error("Failed to load ZenTab CSS", err);
+  }
 
-    #zen-tab-content .search-input {
-      width: 100% !important;
-      padding: 15px 20px !important;
-      font-size: 16px !important;
-      border: none !important;
-      border-radius: 8px !important;
-      outline: none !important;
-      background: #2d2d2d !important;
-      color: #f5f5f5 !important;
-      transition: all 0.3s ease !important;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.2) !important;
-      box-sizing: border-box !important;
-    }
-
-    #zen-tab-content .close-button {
-      position: absolute !important;
-      right: 10px !important;
-      top: 50% !important;
-      transform: translateY(-50%) !important;
-      background: none !important;
-      border: none !important;
-      color: #888 !important;
-      font-size: 24px !important;
-      cursor: pointer !important;
-      width: 30px !important;
-      height: 30px !important;
-      display: flex !important;
-      align-items: center !important;
-      justify-content: center !important;
-      border-radius: 50% !important;
-      transition: all 0.2s ease !important;
-      padding: 0 !important;
-      margin: 0 !important;
-    }
-
-    #zen-tab-content .close-button:hover {
-      background: rgba(255, 255, 255, 0.1) !important;
-      color: #f5f5f5 !important;
-    }
-
-    #zen-tab-content .search-input:focus {
-      background: #3a3a3a !important;
-      box-shadow: 0 0 0 2px #a89f1e !important;
-    }
-
-    #zen-tab-content .search-input::placeholder {
-      color: #888 !important;
-    }
-
-    #zen-tab-content .search-results {
-      width: 95% !important;
-      padding: 0 !important;
-      margin: 0 !important;
-      list-style: none !important;
-      max-height: 300px !important;
-      overflow-y: auto !important;
-      background: #2d2d2d !important;
-      box-shadow: 0 4px 15px rgba(0,0,0,0.2) !important;
-      box-sizing: border-box !important;
-    }
-
-    #zen-tab-content .search-results::-webkit-scrollbar {
-      width: 8px !important;
-    }
-
-    #zen-tab-content .search-results::-webkit-scrollbar-track {
-      background: #2d2d2d !important;
-      border-radius: 4px !important;
-    }
-
-    #zen-tab-content .search-results::-webkit-scrollbar-thumb {
-      background: #4a4a4a !important;
-      border-radius: 4px !important;
-    }
-
-    #zen-tab-content .search-results::-webkit-scrollbar-thumb:hover {
-      background: #5a5a5a !important;
-    }
-
-    #zen-tab-content .search-results li {
-      padding: 15px 20px !important;
-      border-bottom: 1px solid #3a3a3a !important;
-      cursor: pointer !important;
-      transition: background-color 0.2s ease !important;
-      color: #f5f5f5 !important;
-      display: flex !important;
-      align-items: center !important;
-      margin: 0 !important;
-      background: transparent !important;
-    }
-
-    #zen-tab-content .search-results li:last-child {
-      border-bottom: none !important;
-    }
-
-    #zen-tab-content .search-results li:hover {
-      background-color: #4a4a4a !important;
-    }
-
-    #zen-tab-content .search-results li.selected {
-      background-color: #4a4a4a !important;
-    }
-
-    #zen-tab-content .search-results li:hover {
-      background-color: #3a3a3a !important;
-    }
-
-    #zen-tab-content .tab-favicon {
-      width: 16px !important;
-      height: 16px !important;
-      margin-right: 12px !important;
-      object-fit: contain !important;
-    }
-
-    #zen-tab-content .tab-title {
-      flex: 1 !important;
-      white-space: nowrap !important;
-      overflow: hidden !important;
-      text-overflow: ellipsis !important;
-      font-size: 14px !important;
-      line-height: 1.4 !important;
-      margin: 0 !important;
-      padding: 0 !important;
-    }
-
-    #zen-tab-content .no-results {
-      text-align: center !important;
-      color: #888 !important;
-      padding: 20px !important;
-      font-size: 14px !important;
-      margin: 0 !important;
-    }
-
-  `;
-  shadowRoot.appendChild(style);
+  // Add backdrop for click-outside-to-close
+  const backdrop = document.createElement("div");
+  backdrop.className = "zen-tab-backdrop";
+  backdrop.addEventListener("click", handleClose);
+  shadowRoot.appendChild(backdrop);
 
   const contentContainer = document.createElement("div");
   shadowRoot.appendChild(contentContainer);

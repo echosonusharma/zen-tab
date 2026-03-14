@@ -5,6 +5,7 @@ dist/
 packages
 dist/*
 .vscode
+# package-lock.json
 
 # Rust specific
 target/

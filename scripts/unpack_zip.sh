@@ -1,5 +1,9 @@
 #!/bin/bash
 # bash ./scripts/unpack_zip.sh
+#
+# This script extracts all zip files containing 'zen' in their names
+# from the 'packages' directory into a dedicated 'packages/unpacked' folder.
+#
 
 unpack_path='packages/unpacked'
 

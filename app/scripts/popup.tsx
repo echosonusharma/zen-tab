@@ -1,35 +1,30 @@
 import { h } from 'preact';
 import { render } from 'preact';
 import { useState, useEffect } from 'preact/hooks';
+import browser from 'webextension-polyfill';
 import { Store } from "./utils";
 import { StoreType } from './types';
 import '../styles/popup.css';
 
-const audioCaptureStore: Store = new Store("audioCapture", StoreType.LOCAL);
-const searchTabStore: Store = new Store("searchTab", StoreType.LOCAL);
+const searchTabStore: Store<boolean> = new Store("searchTab", StoreType.LOCAL);
+
+const SHORTCUTS = [
+  { label: "Search Tabs", key: "Alt + Q" },
+  { label: "Next Tab", key: "Alt + X" },
+  { label: "Prev Tab", key: "Alt + Z" },
+];
 
 function Popup() {
-  const [audioCapture, setAudioCapture] = useState(false);
   const [searchTab, setSearchTab] = useState(false);
 
   useEffect(() => {
     const setData = async () => {
-      const currAudioCaptureVal = await audioCaptureStore.get() as boolean;
       const currSearchTabVal = await searchTabStore.get() as boolean;
-
-      setAudioCapture(currAudioCaptureVal);
       setSearchTab(currSearchTabVal);
     };
 
     setData();
   }, []);
-
-  const handleAudioCaptureChange = async (e: Event) => {
-    const target = e.target as HTMLInputElement;
-    const newValue = target.checked;
-    setAudioCapture(newValue);
-    await audioCaptureStore.set(newValue);
-  };
 
   const handleSearchTabChange = async (e: Event) => {
     const target = e.target as HTMLInputElement;
@@ -38,20 +33,13 @@ function Popup() {
     await searchTabStore.set(newValue);
   };
 
+  const openShortcutSettings = () => {
+    browser.tabs.create({ url: "chrome://extensions/shortcuts" });
+  };
+
   return (
     <div class="app">
       <div class="toggle-container">
-        {/* <div class="toggle-wrapper">
-          <span class="toggle-label">Audio Capture</span>
-          <label class="toggle">
-            <input
-              type="checkbox"
-              checked={audioCapture}
-              onChange={handleAudioCaptureChange}
-            />
-            <span class="toggle-slider"></span>
-          </label>
-        </div> */}
         <div class="toggle-wrapper">
           <span class="toggle-label">Search Tab</span>
           <label class="toggle">
@@ -63,6 +51,21 @@ function Popup() {
             <span class="toggle-slider"></span>
           </label>
         </div>
+      </div>
+
+      <div class="shortcuts-section">
+        <span class="section-title">Shortcuts</span>
+        <ul class="shortcuts-list">
+          {SHORTCUTS.map((s) => (
+            <li key={s.label}>
+              <span class="shortcut-label">{s.label}</span>
+              <kbd class="shortcut-key">{s.key}</kbd>
+            </li>
+          ))}
+        </ul>
+        <button class="shortcut-hint" onClick={openShortcutSettings}>
+          ⚠ Shortcuts not working? Click to customize
+        </button>
       </div>
     </div>
   );

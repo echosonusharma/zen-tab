@@ -17,6 +17,6 @@
     "jsxFragmentFactory": "Fragment",
     "types": ["preact"]
   },
-  "include": ["app/**/*"],
+  "include": ["app/**/*", "types"],
   "exclude": ["node_modules"]
 }

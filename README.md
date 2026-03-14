@@ -1,44 +1,55 @@
 # ZenTab
 
-**ZenTab** is a quick and simple tab manager for your browser.
-Easily switch between tabs and find the one you need using fuzzy search.
+ZenTab is a lightweight browser extension for efficient tab management. It provides quick navigation and fuzzy search capabilities to help manage multiple open tabs.
 
 ## Features
 
-* Move between open tabs effortlessly
-* Fuzzy search through tabs for fast access
+- Fast tab switching and navigation.
+- Fuzzy search for locating specific tabs across windows.
+- Keyboard-centric interface.
+- Cross-browser support (Chrome, Firefox, Edge, Opera).
 
-## Installation
+## Keyboard Shortcuts
 
-```bash
-npm install
-```
+- Open Search Modal: `Alt+Q`
+- Next Tab: `Alt+X`
+- Previous Tab: `Alt+Z`
+
+*Note: You can customize these shortcuts in your browser's extension settings.*
+
+## Installation and Setup
+
+1. Clone the repository.
+2. Install dependencies:
+   ```bash
+   npm install
+   ```
 
 ## Development
 
-Run the extension in development mode for different browsers:
+Run the extension in development mode with hot-reloading:
 
 ```bash
 npm run dev chrome
 npm run dev firefox
-npm run dev opera
 npm run dev edge
+npm run dev opera
 ```
 
 ## Build
 
-Create a production build for your browser:
+Compile the extension for production:
 
 ```bash
 npm run build chrome
 npm run build firefox
-npm run build opera
 npm run build edge
+npm run build opera
 ```
 
 ## Release
 
-Create a release by running:
+Trigger the automated versioning and release process:
 
 ```bash
 npm run release
@@ -46,9 +57,6 @@ npm run release
 
 ## Acknowledgements
 
-* [Shortcut Script App Icon](https://www.flaticon.com/free-icon/shortcut-script-app_3771467)
-* [Tab Icon](https://www.flaticon.com/free-icon/tab_18743547)
-* [Shortkeys Extension](https://github.com/crittermike/shortkeys)
-* [WebExtension Toolbox](https://github.com/webextension-toolbox/webextension-toolbox)
-* [Build a Chrome Extension (YouTube)](https://www.youtube.com/watch?v=Cu7Tl7FGigQ)
-* [App Icon Maker](https://appiconmaker.co/)
+- Built with [WebExtension Toolbox](https://github.com/webextension-toolbox/webextension-toolbox)
+- Icons from [Flaticon](https://www.flaticon.com/) and [App Icon Maker](https://appiconmaker.co/)
+- Inspired by the [Shortkeys Extension](https://github.com/crittermike/shortkeys)

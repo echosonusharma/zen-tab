@@ -1,0 +1,298 @@
+/* ZenTab Content Script — Glass Apple Theme */
+
+/* ── Animations ────────────────────────────────────────────────────────── */
+
+@keyframes zen-fade-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -48%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+  }
+}
+
+@keyframes zen-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Backdrop ──────────────────────────────────────────────────────────── */
+
+.zen-tab-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999999998 !important;
+  background: rgba(0, 0, 0, 0.45) !important;
+  backdrop-filter: blur(4px) !important;
+  -webkit-backdrop-filter: blur(4px) !important;
+  animation: zen-backdrop-in 0.2s ease-out !important;
+}
+
+/* ── Modal Container ───────────────────────────────────────────────────── */
+
+#zen-tab-content {
+  width: 560px !important;
+  max-height: 460px !important;
+  background: rgba(30, 30, 30, 0.78) !important;
+  backdrop-filter: blur(40px) saturate(1.8) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(1.8) !important;
+  padding: 0 !important;
+  border-radius: 16px !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  box-shadow:
+    0 24px 80px rgba(0, 0, 0, 0.45),
+    0 0 0 0.5px rgba(255, 255, 255, 0.05) inset !important;
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  z-index: 9999999999 !important;
+  color: #f0f0f0 !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+  animation: zen-fade-in 0.2s ease-out !important;
+}
+
+/* ── Search Header ─────────────────────────────────────────────────────── */
+
+#zen-tab-content .header {
+  display: flex !important;
+  align-items: center !important;
+  padding: 16px 16px 0 16px !important;
+  position: relative !important;
+  box-sizing: border-box !important;
+  gap: 8px !important;
+}
+
+#zen-tab-content .search-icon {
+  position: absolute !important;
+  left: 28px !important;
+  top: 50% !important;
+  transform: translateY(-20%) !important;
+  width: 16px !important;
+  height: 16px !important;
+  color: rgba(255, 255, 255, 0.35) !important;
+  pointer-events: none !important;
+  z-index: 1 !important;
+}
+
+#zen-tab-content .search-input {
+  flex: 1 !important;
+  padding: 12px 40px 12px 40px !important;
+  font-size: 15px !important;
+  font-weight: 400 !important;
+  border: none !important;
+  border-radius: 10px !important;
+  outline: none !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  color: #f0f0f0 !important;
+  transition: background 0.2s ease, box-shadow 0.2s ease !important;
+  box-sizing: border-box !important;
+  letter-spacing: 0.01em !important;
+}
+
+#zen-tab-content .search-input:focus {
+  background: rgba(255, 255, 255, 0.1) !important;
+  box-shadow: 0 0 0 1.5px rgba(207, 167, 56, 0.5) !important;
+}
+
+#zen-tab-content .search-input::placeholder {
+  color: rgba(255, 255, 255, 0.3) !important;
+  font-weight: 400 !important;
+}
+
+/* ── Close Button ──────────────────────────────────────────────────────── */
+
+#zen-tab-content .close-button {
+  position: absolute !important;
+  right: 26px !important;
+  top: 50% !important;
+  transform: translateY(-20%) !important;
+  background: none !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+  font-size: 18px !important;
+  cursor: pointer !important;
+  width: 26px !important;
+  height: 26px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  border-radius: 6px !important;
+  transition: all 0.15s ease !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  line-height: 1 !important;
+}
+
+#zen-tab-content .close-button:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+  color: #f0f0f0 !important;
+}
+
+/* ── Tab Count ─────────────────────────────────────────────────────────── */
+
+#zen-tab-content .tab-count {
+  padding: 8px 20px 4px 20px !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.6px !important;
+}
+
+/* ── Results List ──────────────────────────────────────────────────────── */
+
+#zen-tab-content .search-results {
+  padding: 4px 8px 8px 8px !important;
+  margin: 0 !important;
+  list-style: none !important;
+  max-height: 360px !important;
+  overflow-y: auto !important;
+  box-sizing: border-box !important;
+  scroll-behavior: smooth !important;
+}
+
+/* Thin macOS-style scrollbar */
+#zen-tab-content .search-results::-webkit-scrollbar {
+  width: 6px !important;
+}
+
+#zen-tab-content .search-results::-webkit-scrollbar-track {
+  background: transparent !important;
+}
+
+#zen-tab-content .search-results::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1) !important;
+  border-radius: 3px !important;
+}
+
+#zen-tab-content .search-results::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18) !important;
+}
+
+/* ── Tab Items ─────────────────────────────────────────────────────────── */
+
+#zen-tab-content .tab-item {
+  padding: 10px 12px !important;
+  cursor: pointer !important;
+  transition: background 0.12s ease !important;
+  color: #f0f0f0 !important;
+  display: flex !important;
+  align-items: center !important;
+  margin: 0 !important;
+  background: transparent !important;
+  border-radius: 8px !important;
+  gap: 12px !important;
+}
+
+#zen-tab-content .tab-item:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+#zen-tab-content .tab-item.selected {
+  background: rgba(207, 167, 56, 0.12) !important;
+}
+
+#zen-tab-content .tab-item.selected:hover {
+  background: rgba(207, 167, 56, 0.18) !important;
+}
+
+/* Active tab accent bar */
+#zen-tab-content .tab-item.active-tab {
+  position: relative !important;
+}
+
+#zen-tab-content .tab-item.active-tab::before {
+  content: "" !important;
+  position: absolute !important;
+  left: 4px !important;
+  top: 50% !important;
+  transform: translateY(-50%) !important;
+  width: 3px !important;
+  height: 16px !important;
+  background: #cfa738 !important;
+  border-radius: 2px !important;
+}
+
+/* ── Tab Content ───────────────────────────────────────────────────────── */
+
+#zen-tab-content .tab-favicon {
+  width: 18px !important;
+  height: 18px !important;
+  object-fit: contain !important;
+  border-radius: 4px !important;
+  flex-shrink: 0 !important;
+}
+
+#zen-tab-content .tab-info {
+  flex: 1 !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+}
+
+#zen-tab-content .tab-title {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  line-height: 1.3 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  color: rgba(255, 255, 255, 0.92) !important;
+}
+
+#zen-tab-content .tab-url {
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  font-size: 11px !important;
+  font-weight: 400 !important;
+  line-height: 1.3 !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+}
+
+/* ── Empty State ───────────────────────────────────────────────────────── */
+
+#zen-tab-content .no-results {
+  text-align: center !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+  padding: 40px 20px !important;
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  margin: 0 !important;
+}
+
+/* ── Keyboard Hint ─────────────────────────────────────────────────────── */
+
+#zen-tab-content .keyboard-hint {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 16px !important;
+  padding: 10px 16px !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  font-size: 11px !important;
+  color: rgba(255, 255, 255, 0.25) !important;
+}
+
+#zen-tab-content .keyboard-hint kbd {
+  background: rgba(255, 255, 255, 0.06) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 4px !important;
+  padding: 1px 5px !important;
+  font-size: 10px !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Mono', monospace !important;
+  color: rgba(255, 255, 255, 0.4) !important;
+  margin: 0 2px !important;
+}

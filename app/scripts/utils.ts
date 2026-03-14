@@ -1,10 +1,10 @@
 import browser from "webextension-polyfill";
 import { ExtensionMessage, StoreType } from "./types";
 
-export class Store {
-  public keyName: string;
-  public type: StoreType;
-  private storageEngine: browser.Storage.StorageArea;
+export class Store<T> {
+  public readonly keyName: string;
+  public readonly type: StoreType;
+  private readonly storageEngine: browser.Storage.StorageArea;
 
   constructor(keyName: string, type: StoreType = StoreType.LOCAL) {
     this.keyName = keyName;
@@ -13,32 +13,22 @@ export class Store {
   }
 
   /**
-   * Get data from storage
-   * @returns The stored data or undefined if not found
+   * Get data from storage.
+   * @returns The stored data or undefined if not found.
    */
-  public async get<T>(): Promise<T | undefined> {
-    try {
-      const data = await this.storageEngine.get(this.keyName);
-      return data[this.keyName] as T;
-    } catch (error) {
-      logger(`Error getting data for key ${this.keyName}:`, error);
-      return undefined;
-    }
+  public async get(): Promise<T> {
+    const data = await this.storageEngine.get(this.keyName);
+    return data[this.keyName] as T;
   }
 
   /**
-   * Set data in storage
-   * @param data The data to store
-   * @returns true if successful, false otherwise
+   * Set data in storage.
+   * @param data The data to store.
+   * @returns true if successful.
    */
-  public async set<T>(data: T): Promise<boolean> {
-    try {
-      await this.storageEngine.set({ [this.keyName]: data });
-      return true;
-    } catch (error) {
-      logger(`Error setting data for key ${this.keyName}:`, error);
-      return false;
-    }
+  public async set(data: T): Promise<boolean> {
+    await this.storageEngine.set({ [this.keyName]: data });
+    return true;
   }
 }
 
@@ -62,20 +52,4 @@ export async function sendMessageToContentScript(tabId: number, data: ExtensionM
     logger("Error sending message to content script:", err);
     return null;
   }
-}
-
-/**
- * Removes diacritical marks (accents) from a string.
- *
- * @param {string} inputStr - The input string to normalize.
- * @returns {string} - The normalized string.
- *
- * @example
- * normalizeString('âé'); // returns 'ae'
- */
-export function normalizeString(inputStr: string): string {
-  return String(inputStr)
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
 }

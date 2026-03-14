@@ -7,8 +7,7 @@ export type ExtensionMessage =
   | { action: "closeSearchTab" }
   | { action: "switchToTab"; data: { tabId: number } }
   | { action: "getCurrentWindowTabs" }
-  | { action: "orderTabsBySearchKeyword"; data: { searchKeyword: string; tabs: TabInfo[] } }
-  | { action: "ping"; data?: undefined };
+  | { action: "orderTabsBySearchKeyword"; data: { searchKeyword: string; tabs: TabInfo[] } };
 
 export enum StoreType {
   LOCAL = "local",
