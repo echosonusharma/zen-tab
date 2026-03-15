@@ -28,7 +28,7 @@
   },
   "dependencies": {
     "ld-wasm-lib": "file:ld-wasm-lib/pkg",
-    "preact": "^10.28.1",
+    "preact": "^10.29.0",
     "webextension-polyfill": "^0.12.0"
   }
 }
