@@ -2,25 +2,23 @@ import { h } from 'preact';
 import { render } from 'preact';
 import { useState, useEffect } from 'preact/hooks';
 import browser from 'webextension-polyfill';
-import { Store } from "./utils";
+import { Store, openShortcutSettings } from "./utils";
 import { StoreType } from './types';
 import '../styles/popup.css';
 
 const searchTabStore: Store<boolean> = new Store("searchTab", StoreType.LOCAL);
 
-const SHORTCUTS = [
-  { label: "Search Tabs", key: "Alt + Q" },
-  { label: "Next Tab", key: "Alt + X" },
-  { label: "Prev Tab", key: "Alt + Z" },
-];
-
 function Popup() {
   const [searchTab, setSearchTab] = useState(false);
+  const [shortcuts, setShortcuts] = useState<browser.Commands.Command[]>([]);
 
   useEffect(() => {
     const setData = async () => {
       const currSearchTabVal = await searchTabStore.get() as boolean;
       setSearchTab(currSearchTabVal);
+
+      const cmds = await browser.commands.getAll();
+      setShortcuts(cmds.filter(c => c.name && c.name !== '_execute_action' && c.name !== '_execute_browser_action'));
     };
 
     setData();
@@ -33,9 +31,7 @@ function Popup() {
     await searchTabStore.set(newValue);
   };
 
-  const openShortcutSettings = () => {
-    browser.tabs.create({ url: "chrome://extensions/shortcuts" });
-  };
+  const hasMissingShortcuts = shortcuts.some(s => !s.shortcut);
 
   return (
     <div class="app">
@@ -56,15 +52,17 @@ function Popup() {
       <div class="shortcuts-section">
         <span class="section-title">Shortcuts</span>
         <ul class="shortcuts-list">
-          {SHORTCUTS.map((s) => (
-            <li key={s.label}>
-              <span class="shortcut-label">{s.label}</span>
-              <kbd class="shortcut-key">{s.key}</kbd>
+          {shortcuts.map((s) => (
+            <li key={s.name}>
+              <span class="shortcut-label">{s.description || s.name}</span>
+              <kbd class={s.shortcut ? "shortcut-key" : "shortcut-key missing"}>
+                {s.shortcut || "Unassigned"}
+              </kbd>
             </li>
           ))}
         </ul>
-        <button class="shortcut-hint" onClick={openShortcutSettings}>
-          ⚠ Shortcuts not working? Click to customize
+        <button class={hasMissingShortcuts ? "shortcut-hint error" : "shortcut-hint"} onClick={openShortcutSettings}>
+          {hasMissingShortcuts ? "⚠ Shortcuts missing! Click to assign" : "⚠ Edit Shortcuts"}
         </button>
       </div>
     </div>
@@ -73,5 +71,5 @@ function Popup() {
 
 const app = document.getElementById('app');
 if (app) {
-  render(<Popup />, app);
+  render(<Popup />, app as Element);
 }

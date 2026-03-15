@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 import { ExtensionMessage, StoreType, TabData, TabInfo } from "./types";
-import { Store, logger } from "./utils";
+import { Store, logger, openShortcutSettings } from "./utils";
 import initWasmModule, { init_wasm, generate_keyword_for_tab, ld } from "ld-wasm-lib";
 
 initWasmModule()
@@ -23,10 +23,30 @@ const searchTabStore: Store<boolean> = new Store("searchTab", StoreType.LOCAL);
 
 browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
 
-browser.runtime.onInstalled.addListener(async () => {
+browser.runtime.onInstalled.addListener(async (details) => {
   await initWindowAndTabData();
   await searchTabStore.set(true);
+
+  if (details.reason === "install") {
+    checkAndPromptShortcuts();
+  }
 });
+
+async function checkAndPromptShortcuts(): Promise<void> {
+  try {
+    const commands = await browser.commands.getAll();
+    const missingShortcuts = commands.filter(
+      (cmd) => cmd.name !== "_execute_action" && cmd.name !== "_execute_browser_action" && !cmd.shortcut
+    );
+
+    if (missingShortcuts.length > 0) {
+      // Cannot force set keys, prompt user by opening the extensions shortcut page
+      await openShortcutSettings();
+    }
+  } catch (error) {
+    logger(`Error checking shortcuts:`, error);
+  }
+}
 
 browser.runtime.onMessage.addListener(
   async (message: unknown, _sender: browser.Runtime.MessageSender): Promise<any> => {

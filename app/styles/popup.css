@@ -1,7 +1,7 @@
 @import url("root.css");
 
 body {
-  width: 200px;
+  width: 300px;
   margin: 0;
   padding: 0;
   font-family: var(--font-family);
@@ -69,11 +69,11 @@ body {
   border-radius: 50%;
 }
 
-input:checked + .toggle-slider {
+input:checked+.toggle-slider {
   background-color: var(--color-accent);
 }
 
-input:checked + .toggle-slider:before {
+input:checked+.toggle-slider:before {
   transform: translateX(20px);
 }
 
@@ -140,4 +140,18 @@ input:checked + .toggle-slider:before {
 
 .shortcut-hint:hover {
   background: rgba(207, 167, 56, 0.1);
+}
+
+.shortcut-key.missing {
+  color: #ff6b6b;
+  border-color: #ff6b6b;
+}
+
+.shortcut-hint.error {
+  color: #ff6b6b;
+  border-color: #ff6b6b;
+}
+
+.shortcut-hint.error:hover {
+  background: rgba(255, 107, 107, 0.1);
 }

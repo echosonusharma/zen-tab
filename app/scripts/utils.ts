@@ -53,3 +53,33 @@ export async function sendMessageToContentScript(tabId: number, data: ExtensionM
     return null;
   }
 }
+
+export function getShortcutsPageUrl(): string {
+  const userAgent = navigator.userAgent.toLowerCase();
+  
+  if (userAgent.includes("edg/")) {
+    return "edge://extensions/shortcuts";
+  }
+  if (userAgent.includes("opr/") || userAgent.includes("opera")) {
+    return "opera://extensions/shortcuts";
+  }
+  if (userAgent.includes("vivaldi")) {
+    return "vivaldi://extensions";
+  }
+  if (userAgent.includes("firefox")) {
+    return "about:addons"; // User still has to click the gear icon to manage shortcuts
+  }
+  
+  // Default for Chrome, Brave, and other Chromium browsers
+  return "chrome://extensions/shortcuts";
+}
+
+export async function openShortcutSettings(): Promise<void> {
+  const url = getShortcutsPageUrl();
+  try {
+    await browser.tabs.create({ url });
+  } catch (e) {
+    logger("Error opening shortcuts page programmatically", e);
+    // In some browsers (like Firefox), extensions might not have permission to open internal pages via tabs.create.
+  }
+}
