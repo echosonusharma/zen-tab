@@ -81,6 +81,11 @@
   z-index: 1 !important;
 }
 
+#zen-tab-content .site-icon {
+  border-radius: 4px !important;
+  opacity: 0.8 !important;
+}
+
 #zen-tab-content .search-input {
   flex: 1 !important;
   padding: 12px 40px 12px 40px !important;

@@ -9,7 +9,7 @@ ZenTab is a lightweight browser extension for efficient tab management. It provi
 - Keyboard-centric interface.
 - Cross-browser support (Chrome, Firefox, Edge, Opera).
 
-## Keyboard Shortcuts
+## Suggested Keyboard Shortcuts
 
 - Open Search Modal: `Alt+Q`
 - Next Tab: `Alt+X`

@@ -4,6 +4,7 @@ import browser from "webextension-polyfill";
 import { useEffect, useState, useRef } from "preact/hooks";
 import { broadcastMsgToServiceWorker, Store } from "./utils";
 import { ExtensionMessage, StoreType, TabInfo } from "./types";
+import { getFavicon } from "./favicon-cache";
 
 // Wrap everything in an IIFE to prevent "already declared" errors
 // when the content script is re-injected on each shortcut press.
@@ -42,11 +43,23 @@ import { ExtensionMessage, StoreType, TabInfo } from "./types";
   }
 
   function TabComponent({ tab, isActive }: { tab: TabInfo; isActive: boolean }) {
+    const [iconUrl, setIconUrl] = useState(tab.favIconUrl || browser.runtime.getURL("images/tab.png"));
+
+    useEffect(() => {
+      getFavicon(tab.favIconUrl).then((url) => {
+        if (url) setIconUrl(url);
+      });
+    }, [tab.favIconUrl]);
+
     return (
       <Fragment>
         <img
-          src={tab.favIconUrl}
-          onError={(e) => (e.currentTarget.src = browser.runtime.getURL("images/tab.png"))}
+          src={iconUrl}
+          onError={(e) => {
+            if (iconUrl !== browser.runtime.getURL("images/tab.png")) {
+              setIconUrl(browser.runtime.getURL("images/tab.png"));
+            }
+          }}
           alt=""
           className="tab-favicon"
         />
@@ -213,11 +226,31 @@ import { ExtensionMessage, StoreType, TabInfo } from "./types";
     }
   }
 
+  function globalKeyCaptureListener(e: KeyboardEvent) {
+    const currentContainer = document.querySelector(CONTAINER_SELECTOR);
+    if (!currentContainer) return;
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      handleClose();
+      return;
+    }
+
+    const isFromContainer = e.composedPath().includes(currentContainer);
+    if (!isFromContainer) {
+      e.stopPropagation();
+    }
+  }
+
   function handleClose() {
     const container = document.querySelector(CONTAINER_SELECTOR);
     if (container) {
       document.removeEventListener("visibilitychange", visibilityListener);
       browser.runtime.onMessage.removeListener(messageListener);
+      window.removeEventListener("keydown", globalKeyCaptureListener, true);
+      window.removeEventListener("keyup", globalKeyCaptureListener, true);
+      window.removeEventListener("keypress", globalKeyCaptureListener, true);
       container.remove();
     }
   }
@@ -226,6 +259,9 @@ import { ExtensionMessage, StoreType, TabInfo } from "./types";
 
   browser.runtime.onMessage.addListener(messageListener);
   document.addEventListener("visibilitychange", visibilityListener);
+  window.addEventListener("keydown", globalKeyCaptureListener, true);
+  window.addEventListener("keyup", globalKeyCaptureListener, true);
+  window.addEventListener("keypress", globalKeyCaptureListener, true);
 
   const existingContainer = document.querySelector(CONTAINER_SELECTOR);
   if (existingContainer) {
@@ -241,6 +277,13 @@ import { ExtensionMessage, StoreType, TabInfo } from "./types";
 
   const container = document.createElement("div");
   container.setAttribute("data-zen-tab-container", "true");
+
+  // Prevent keyboard events originating from inside the container from bubbling out to the host document
+  const stopBubbling = (e: Event) => e.stopPropagation();
+  container.addEventListener("keydown", stopBubbling);
+  container.addEventListener("keyup", stopBubbling);
+  container.addEventListener("keypress", stopBubbling);
+
   const shadowRoot = container.attachShadow({ mode: "open" });
 
   // Load styles from external CSS file and wait for it
