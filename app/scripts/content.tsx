@@ -43,7 +43,7 @@ import { getFavicon } from "./favicon-cache";
   }
 
   function TabComponent({ tab, isActive }: { tab: TabInfo; isActive: boolean }) {
-    const [iconUrl, setIconUrl] = useState(tab.favIconUrl || browser.runtime.getURL("images/tab.png"));
+    const [iconUrl, setIconUrl] = useState(tab.favIconUrl || browser.runtime.getURL("images/zentab-icon.svg"));
 
     useEffect(() => {
       getFavicon(tab.favIconUrl).then((url) => {
@@ -56,8 +56,8 @@ import { getFavicon } from "./favicon-cache";
         <img
           src={iconUrl}
           onError={(e) => {
-            if (iconUrl !== browser.runtime.getURL("images/tab.png")) {
-              setIconUrl(browser.runtime.getURL("images/tab.png"));
+            if (iconUrl !== browser.runtime.getURL("images/zentab-icon.svg")) {
+              setIconUrl(browser.runtime.getURL("images/zentab-icon.svg"));
             }
           }}
           alt=""

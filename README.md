@@ -58,5 +58,5 @@ npm run release
 ## Acknowledgements
 
 - Built with [WebExtension Toolbox](https://github.com/webextension-toolbox/webextension-toolbox)
-- Icons from [Flaticon](https://www.flaticon.com/) and [App Icon Maker](https://appiconmaker.co/)
+- Icons created with help of [App Icon Maker](https://appiconmaker.co/)
 - Inspired by the [Shortkeys Extension](https://github.com/crittermike/shortkeys)
