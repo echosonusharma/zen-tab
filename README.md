@@ -1,6 +1,12 @@
-# ZenTab
+<p align="center">
+  <img src="app/images/zentab-icon.svg" width="128" height="128" alt="ZenTab Icon">
+</p>
 
-ZenTab is a lightweight browser extension for efficient tab management. It provides quick navigation and fuzzy search capabilities to help manage multiple open tabs.
+<h1 align="center">ZenTab</h1>
+
+<p align="center">
+  <b>ZenTab</b> is a lightweight browser extension for efficient tab management. It provides quick navigation and fuzzy search capabilities to help manage multiple open tabs.
+</p>
 
 ## Features
 
