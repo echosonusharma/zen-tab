@@ -1,28 +1,95 @@
-import { h } from 'preact';
-import { render } from 'preact';
+import { h, render } from 'preact';
 import { useState, useEffect } from 'preact/hooks';
 import browser from 'webextension-polyfill';
 import { Store, openShortcutSettings } from "./utils";
 import { StoreType } from './types';
 import '../styles/popup.css';
+import '../styles/content.css';
+import { SearchApp } from "./search-app";
 
 const searchTabStore: Store<boolean> = new Store("searchTab", StoreType.LOCAL);
+const searchFallbackStore: Store<number> = new Store("searchFallback", StoreType.SESSION);
+const FALLBACK_TIMEOUT = 2500;
 
 function Popup() {
   const [searchTab, setSearchTab] = useState(false);
   const [shortcuts, setShortcuts] = useState<browser.Commands.Command[]>([]);
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
     const setData = async () => {
-      const currSearchTabVal = await searchTabStore.get() as boolean;
-      setSearchTab(currSearchTabVal);
+      try {
+        const fallbackTimestamp = await searchFallbackStore.get() as number;
+        if (fallbackTimestamp && Date.now() - fallbackTimestamp < FALLBACK_TIMEOUT) {
+          setIsSearchMode(true);
+          document.body.style.width = '560px';
+          document.body.style.minHeight = '145px';
 
-      const cmds = await browser.commands.getAll();
-      setShortcuts(cmds.filter(c => c.name && c.name !== '_execute_action' && c.name !== '_execute_browser_action'));
+          const style = document.createElement('style');
+          style.innerText = `
+            html, body {
+              box-sizing: border-box !important;
+              height: fit-content !important;
+              margin: 0 !important;
+            }
+            body {
+              overflow: hidden !important;
+              padding: 0 !important;
+            }
+            #zen-tab-content {
+              border: none !important;
+              position: relative !important;
+              top: 0 !important;
+              left: 0 !important;
+              transform: none !important;
+              height: auto !important;
+              min-height: 100% !important;
+              max-height: none !important;
+              box-shadow: none !important;
+              border-radius: 0 !important;
+              width: 100% !important;
+            }
+          `;
+          document.head.appendChild(style);
+
+          await searchFallbackStore.set(0);
+          return;
+        }
+
+        const currSearchTabVal = await searchTabStore.get() as boolean;
+        setSearchTab(currSearchTabVal);
+
+        const cmds = await browser.commands.getAll();
+        setShortcuts(cmds.filter(c => c.name && c.name !== '_execute_action' && c.name !== '_execute_browser_action'));
+      } catch (error) {
+        console.error("Popup setup failed", error);
+      } finally {
+        setIsLoading(false);
+      }
     };
 
     setData();
   }, []);
+
+  useEffect(() => {
+    if (!isSearchMode) return;
+    
+    const port = browser.runtime.connect({ name: "popupSearchMode" });
+
+    const handleCommand = (command: string) => {
+      if (command === "open_and_close_search") {
+        window.close();
+      }
+    };
+
+    browser.commands.onCommand.addListener(handleCommand);
+
+    return () => {
+      port.disconnect();
+      browser.commands.onCommand.removeListener(handleCommand);
+    };
+  }, [isSearchMode]);
 
   const handleSearchTabChange = async (e: Event) => {
     const target = e.target as HTMLInputElement;
@@ -32,6 +99,14 @@ function Popup() {
   };
 
   const hasMissingShortcuts = shortcuts.some(s => !s.shortcut);
+
+  if (isLoading) {
+    return null;
+  }
+
+  if (isSearchMode) {
+    return <SearchApp onClose={() => window.close()} />;
+  }
 
   return (
     <div class="app">

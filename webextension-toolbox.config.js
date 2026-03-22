@@ -30,5 +30,9 @@ export function webpack(config, { dev, vendor }) {
     outputModule: true
   };
 
+  if (!dev) {
+    config.devtool = false;
+  }
+
   return config;
 }

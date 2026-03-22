@@ -18,8 +18,20 @@ const tabsStore: Store<TabData> = new Store("tabs", StoreType.SESSION);
 const activeTabIdStore: Store<number> = new Store("activeTabId", StoreType.SESSION);
 const activeWindowIdStore: Store<number> = new Store("activeWindowId", StoreType.SESSION);
 const searchTabStore: Store<boolean> = new Store("searchTab", StoreType.LOCAL);
+const searchFallbackStore: Store<number> = new Store("searchFallback", StoreType.SESSION);
 
 // Runtime Events
+
+let searchPopupConnections = 0;
+
+browser.runtime.onConnect.addListener((port) => {
+  if (port.name === "popupSearchMode") {
+    searchPopupConnections++;
+    port.onDisconnect.addListener(() => {
+      searchPopupConnections--;
+    });
+  }
+});
 
 browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
 
@@ -66,6 +78,9 @@ browser.runtime.onMessage.addListener(
       case "orderTabsBySearchKeyword":
         return orderTabsBySearchKeyword(msg.data.searchKeyword, msg.data.tabs);
 
+      case "fetchFavicon":
+        return await handleFetchFavicon(msg.data.iconUrl);
+
       default:
         return undefined;
     }
@@ -75,8 +90,21 @@ browser.runtime.onMessage.addListener(
 // Window Events
 
 browser.windows.onFocusChanged.addListener(async (windowId: number) => {
+  const previousWindowId = (await activeWindowIdStore.get()) as number;
+
   if (windowId !== browser.windows.WINDOW_ID_NONE) {
     await activeWindowIdStore.set(windowId);
+  }
+
+  if (previousWindowId && previousWindowId !== windowId && previousWindowId !== browser.windows.WINDOW_ID_NONE) {
+    try {
+      const prevActiveTabs = await browser.tabs.query({ active: true, windowId: previousWindowId });
+      if (prevActiveTabs[0]?.id !== undefined) {
+        await browser.tabs.sendMessage(prevActiveTabs[0].id, { action: "closeSearchTab" });
+      }
+    } catch {
+      // Ignore errors when a tab context does not contain the listener
+    }
   }
 });
 
@@ -165,18 +193,33 @@ browser.tabs.onRemoved.addListener(async (tabId: number, removeInfo: browser.Tab
 });
 
 browser.tabs.onActivated.addListener(async (activeInfo: browser.Tabs.OnActivatedActiveInfoType) => {
+  const previousTabId = (await activeTabIdStore.get()) as number;
+
   await activeTabIdStore.set(activeInfo.tabId);
+
+  // Instantly instruct the previous tab to destroy any injected search UI
+  if (previousTabId && previousTabId !== activeInfo.tabId) {
+    try {
+      await browser.tabs.sendMessage(previousTabId, { action: "closeSearchTab" });
+    } catch {
+      // Ignore errors when the tab does not have the content script injected
+    }
+  }
 });
 
 // Command Handler
 
 browser.commands.onCommand.addListener(async (command: string) => {
-  const activeTabId = (await activeTabIdStore.get()) as number;
-  const activeWindowId = (await activeWindowIdStore.get()) as number;
+  try {
+    const activeTabs = await browser.tabs.query({ active: true, lastFocusedWindow: true });
+    if (!activeTabs || activeTabs.length === 0) return;
 
-  if (!activeTabId || !activeWindowId) {
-    return;
-  }
+    const activeTabId = activeTabs[0].id;
+    const activeWindowId = activeTabs[0].windowId;
+
+    if (!activeTabId || !activeWindowId) {
+      return;
+    }
 
   const tabIdsData = (await tabsStore.get()) as TabData;
 
@@ -190,8 +233,11 @@ browser.commands.onCommand.addListener(async (command: string) => {
       await handleWindowMoveCmd(tabIdsData, command as WindowCommand, activeWindowId);
       break;
     case "open_and_close_search":
-      await handleSearchCmd(activeTabId);
+      await handleSearchCmd(activeTabId, activeWindowId);
       break;
+  }
+  } catch (err) {
+    logger("Error handling command:", err);
   }
 });
 
@@ -249,14 +295,24 @@ async function handleWindowMoveCmd(
   }
 }
 
-async function handleSearchCmd(activeTabId: number): Promise<void> {
+async function handleSearchCmd(activeTabId: number, activeWindowId: number): Promise<void> {
+  if (searchPopupConnections > 0) {
+    return;
+  }
+
   try {
     await browser.scripting.executeScript({
       target: { tabId: activeTabId },
       files: [PATH_TO_CONTENT_SCRIPT],
     });
   } catch (error) {
-    logger(`Error in handleSearchCmd:`, error);
+    logger(`Error in handleSearchCmd, falling back to popup:`, error);
+    try {
+      await searchFallbackStore.set(Date.now());
+      await browser.action.openPopup({ windowId: activeWindowId });
+    } catch (fallbackError) {
+      logger(`Failed to open fallback popup:`, fallbackError);
+    }
   }
 }
 
@@ -373,4 +429,47 @@ function orderTabsBySearchKeyword(searchKeyword: string, tabs: TabInfo[]): TabIn
   });
 
   return tabs;
+}
+
+const FAVICON_CACHE_KEY = "favicon_cache";
+const FAVICON_TTL = 24 * 60 * 60 * 1000;
+let faviconMemoryCache: Record<string, any> | null = null;
+
+async function handleFetchFavicon(iconUrl: string): Promise<string> {
+  if (!faviconMemoryCache) {
+    const result = await browser.storage.local.get(FAVICON_CACHE_KEY);
+    faviconMemoryCache = result[FAVICON_CACHE_KEY] || {};
+  }
+
+  const entry = faviconMemoryCache![iconUrl];
+  const now = Date.now();
+
+  if (entry && now - entry.timestamp < FAVICON_TTL) {
+    return entry.data;
+  }
+
+  try {
+    const res = await fetch(iconUrl);
+    if (!res.ok) throw new Error("Fetch failed");
+
+    const buffer = await res.arrayBuffer();
+
+    let binary = '';
+    const bytes = new Uint8Array(buffer);
+    const len = bytes.byteLength;
+    for (let i = 0; i < len; i++) {
+      binary += String.fromCharCode(bytes[i]);
+    }
+    const base64 = btoa(binary);
+
+    const contentType = res.headers.get("content-type") || "image/png";
+    const dataUrl = `data:${contentType};base64,${base64}`;
+
+    faviconMemoryCache![iconUrl] = { data: dataUrl, timestamp: now };
+    await browser.storage.local.set({ [FAVICON_CACHE_KEY]: faviconMemoryCache });
+
+    return dataUrl;
+  } catch {
+    return entry?.data || iconUrl;
+  }
 }
