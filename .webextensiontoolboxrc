@@ -1,5 +1,5 @@
 src: app
-target: dist/chrome
+target: dist/[vendor]
 devtool: cheap-source-map
 manifestValidation: true
 autoReload: true

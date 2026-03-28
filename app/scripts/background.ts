@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 import { ExtensionMessage, StoreType, TabData, TabInfo } from "./types";
-import { Store, logger, openShortcutSettings } from "./utils";
+import { Store, getNewTabUrls, logger, openShortcutSettings } from "./utils";
 import initWasmModule, { init_wasm, generate_keyword_for_tab, ld } from "ld-wasm-lib";
 
 initWasmModule()
@@ -368,7 +368,7 @@ async function updateTabStores(tabQueryOptions: browser.Tabs.QueryQueryInfoType 
 
 // Tab Query & Search
 
-const NEW_TAB_URLS = new Set(["about:newtab", "chrome://newtab/"]);
+const NEW_TAB_URLS = getNewTabUrls();
 
 async function getTabsInCurrentWindow(): Promise<TabInfo[]> {
   try {

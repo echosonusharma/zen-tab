@@ -42,6 +42,8 @@ npm run dev edge
 npm run dev opera
 ```
 
+Each command writes its unpacked extension files to `dist/<browser>`, for example `dist/firefox` or `dist/edge`.
+
 ## Build
 
 Compile the extension for production:
@@ -52,6 +54,8 @@ npm run build firefox
 npm run build edge
 npm run build opera
 ```
+
+Production builds are also written to `dist/<browser>` so each browser keeps a separate on-disk build directory.
 
 ## Release
 

@@ -1,4 +1,6 @@
 export function webpack(config, { dev, vendor }) {
+  const useModuleOutput = vendor !== 'firefox';
+
   config.resolve.alias = {
     ...config.resolve.alias,
     'react': 'preact/compat',
@@ -16,19 +18,34 @@ export function webpack(config, { dev, vendor }) {
 
   config.output = {
     ...config.output,
-    module: true,
-    chunkFormat: 'module',
     publicPath: '/',
     environment: {
-      module: true
+      ...config.output?.environment,
+      module: useModuleOutput
     }
   };
 
+  if (useModuleOutput) {
+    config.output = {
+      ...config.output,
+      module: true,
+      chunkFormat: 'module'
+    };
+  } else {
+    delete config.output.module;
+    delete config.output.chunkFormat;
+  }
+
   config.experiments = {
     ...config.experiments,
-    asyncWebAssembly: true,
-    outputModule: true
+    asyncWebAssembly: true
   };
+
+  if (useModuleOutput) {
+    config.experiments.outputModule = true;
+  } else {
+    delete config.experiments.outputModule;
+  }
 
   if (!dev) {
     config.devtool = false;

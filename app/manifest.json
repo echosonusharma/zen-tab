@@ -7,12 +7,18 @@
   "content_security_policy": {
     "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
   },
-  "permissions": [
+  "__chrome|edge|opera__permissions": [
     "storage",
     "tabs",
     "activeTab",
     "scripting",
-    "windows",
+    "idle"
+  ],
+  "__firefox__permissions": [
+    "storage",
+    "tabs",
+    "activeTab",
+    "scripting",
     "idle"
   ],
   "host_permissions": [
@@ -32,8 +38,11 @@
     "128": "images/icon-128.png"
   },
   "background": {
-    "service_worker": "scripts/background.js",
-    "type": "module"
+    "__chrome|edge|opera__service_worker": "scripts/background.js",
+    "__chrome|edge|opera__type": "module",
+    "__firefox__scripts": [
+      "scripts/background.js"
+    ]
   },
   "web_accessible_resources": [
     {

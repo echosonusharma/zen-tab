@@ -1,6 +1,76 @@
 import browser from "webextension-polyfill";
 import { ExtensionMessage, StoreType } from "./types";
 
+type BrowserKey = "chromium" | "edge" | "firefox" | "opera" | "vivaldi";
+
+type BrowserConfig = {
+  newTabUrls: string[];
+  shortcutsPageUrl: string;
+};
+
+const BROWSER_CONFIG_MAP: Record<BrowserKey, BrowserConfig> = {
+  chromium: {
+    newTabUrls: ["chrome://newtab/"],
+    shortcutsPageUrl: "chrome://extensions/shortcuts",
+  },
+  edge: {
+    newTabUrls: ["edge://newtab/"],
+    shortcutsPageUrl: "edge://extensions/shortcuts",
+  },
+  firefox: {
+    newTabUrls: ["about:newtab"],
+    shortcutsPageUrl: "about:addons",
+  },
+  opera: {
+    newTabUrls: ["opera://startpage/"],
+    shortcutsPageUrl: "opera://extensions/shortcuts",
+  },
+  vivaldi: {
+    newTabUrls: ["vivaldi://newtab/"],
+    shortcutsPageUrl: "vivaldi://extensions",
+  },
+};
+
+function getBrowserKey(): BrowserKey {
+  const userAgent = navigator.userAgent.toLowerCase();
+
+  if (userAgent.includes("edg/")) {
+    return "edge";
+  }
+  if (userAgent.includes("opr/") || userAgent.includes("opera")) {
+    return "opera";
+  }
+  if (userAgent.includes("vivaldi")) {
+    return "vivaldi";
+  }
+  if (userAgent.includes("firefox")) {
+    return "firefox";
+  }
+
+  return "chromium";
+}
+
+export function getBrowserConfig(): BrowserConfig {
+  return BROWSER_CONFIG_MAP[getBrowserKey()];
+}
+
+export function getNewTabUrls(): Set<string> {
+  const browserConfig = getBrowserConfig();
+  const sharedUrls = new Set<string>();
+
+  for (const config of Object.values(BROWSER_CONFIG_MAP)) {
+    for (const newTabUrl of config.newTabUrls) {
+      sharedUrls.add(newTabUrl);
+    }
+  }
+
+  for (const newTabUrl of browserConfig.newTabUrls) {
+    sharedUrls.add(newTabUrl);
+  }
+
+  return sharedUrls;
+}
+
 export class Store<T> {
   public readonly keyName: string;
   public readonly type: StoreType;
@@ -55,31 +125,29 @@ export async function sendMessageToContentScript(tabId: number, data: ExtensionM
 }
 
 export function getShortcutsPageUrl(): string {
-  const userAgent = navigator.userAgent.toLowerCase();
-  
-  if (userAgent.includes("edg/")) {
-    return "edge://extensions/shortcuts";
-  }
-  if (userAgent.includes("opr/") || userAgent.includes("opera")) {
-    return "opera://extensions/shortcuts";
-  }
-  if (userAgent.includes("vivaldi")) {
-    return "vivaldi://extensions";
-  }
-  if (userAgent.includes("firefox")) {
-    return "about:addons"; // User still has to click the gear icon to manage shortcuts
-  }
-  
-  // Default for Chrome, Brave, and other Chromium browsers
-  return "chrome://extensions/shortcuts";
+  return getBrowserConfig().shortcutsPageUrl;
 }
 
 export async function openShortcutSettings(): Promise<void> {
   const url = getShortcutsPageUrl();
+
   try {
     await browser.tabs.create({ url });
+    return;
   } catch (e) {
     logger("Error opening shortcuts page programmatically", e);
-    // In some browsers (like Firefox), extensions might not have permission to open internal pages via tabs.create.
+  }
+
+  try {
+    window.open(url, "_blank", "noopener,noreferrer");
+    return;
+  } catch (e) {
+    logger("Error opening shortcuts page via window.open", e);
+  }
+
+  try {
+    window.location.href = url;
+  } catch (e) {
+    logger("Error navigating to shortcuts page", e);
   }
 }
