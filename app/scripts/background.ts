@@ -221,21 +221,21 @@ browser.commands.onCommand.addListener(async (command: string) => {
       return;
     }
 
-  const tabIdsData = (await tabsStore.get()) as TabData;
+    const tabIdsData = (await tabsStore.get()) as TabData;
 
-  switch (command) {
-    case "next_tab":
-    case "prev_tab":
-      await handleTabMoveCmd(tabIdsData, command as TabCommand, activeTabId, activeWindowId);
-      break;
-    case "next_win":
-    case "prev_win":
-      await handleWindowMoveCmd(tabIdsData, command as WindowCommand, activeWindowId);
-      break;
-    case "open_and_close_search":
-      await handleSearchCmd(activeTabId, activeWindowId);
-      break;
-  }
+    switch (command) {
+      case "next_tab":
+      case "prev_tab":
+        await handleTabMoveCmd(tabIdsData, command as TabCommand, activeTabId, activeWindowId);
+        break;
+      case "next_win":
+      case "prev_win":
+        await handleWindowMoveCmd(tabIdsData, command as WindowCommand, activeWindowId);
+        break;
+      case "open_and_close_search":
+        await handleSearchCmd(activeTabId, activeWindowId);
+        break;
+    }
   } catch (err) {
     logger("Error handling command:", err);
   }
@@ -469,7 +469,7 @@ async function handleFetchFavicon(iconUrl: string): Promise<string> {
     await browser.storage.local.set({ [FAVICON_CACHE_KEY]: faviconMemoryCache });
 
     return dataUrl;
-  } catch {
-    return entry?.data || iconUrl;
+  } catch (error) {
+    return entry?.data || "";
   }
 }

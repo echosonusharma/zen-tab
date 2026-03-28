@@ -48,11 +48,14 @@ function extractDomain(url?: string): string {
 }
 
 function TabComponent({ tab, isActive }: { tab: TabInfo; isActive: boolean }) {
-  const [iconUrl, setIconUrl] = useState(tab.favIconUrl || browser.runtime.getURL("images/tabaru-icon.svg"));
+  const fallbackIconUrl = browser.runtime.getURL("images/tabaru-icon.svg");
+  const [iconUrl, setIconUrl] = useState(fallbackIconUrl);
 
   useEffect(() => {
     getFavicon(tab.favIconUrl).then((url) => {
-      if (url) setIconUrl(url);
+      if (url) {
+        setIconUrl(url);
+      }
     });
   }, [tab.favIconUrl]);
 
@@ -61,8 +64,8 @@ function TabComponent({ tab, isActive }: { tab: TabInfo; isActive: boolean }) {
       <img
         src={iconUrl}
         onError={(e) => {
-          if (iconUrl !== browser.runtime.getURL("images/tabaru-icon.svg")) {
-            setIconUrl(browser.runtime.getURL("images/tabaru-icon.svg"));
+          if (iconUrl !== fallbackIconUrl) {
+            setIconUrl(fallbackIconUrl);
           }
         }}
         alt=""
