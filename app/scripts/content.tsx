@@ -6,7 +6,7 @@ import { SearchApp } from "./search-app";
 
 // Wrap everything in an IIFE to prevent "already declared" errors when the content script is re-injected on each shortcut press.
 (async function () {
-  const CONTAINER_SELECTOR = "div[data-zen-tab-container]";
+  const CONTAINER_SELECTOR = "div[data-tabaru-container]";
 
   // Lifecycle Handlers
 
@@ -73,7 +73,7 @@ import { SearchApp } from "./search-app";
   }
 
   const container = document.createElement("div");
-  container.setAttribute("data-zen-tab-container", "true");
+  container.setAttribute("data-tabaru-container", "true");
 
   // Prevent keyboard events originating from inside the container from bubbling out to the host document
   const stopBubbling = (e: Event) => e.stopPropagation();
@@ -93,12 +93,12 @@ import { SearchApp } from "./search-app";
     styleTag.textContent = cssText;
     shadowRoot.appendChild(styleTag);
   } catch (err) {
-    console.error("Failed to load ZenTab CSS", err);
+    console.error("Failed to load Tabaru CSS", err);
   }
 
   // Add backdrop for click-outside-to-close
   const backdrop = document.createElement("div");
-  backdrop.className = "zen-tab-backdrop";
+  backdrop.className = "tabaru-backdrop";
   backdrop.addEventListener("click", handleClose);
   shadowRoot.appendChild(backdrop);
 

@@ -3,7 +3,7 @@ name = "ld-wasm-lib"
 version = "0.1.0"
 edition = "2024"
 description = "A WebAssembly library for LD operations"
-repository = "https://github.com/echosonusharma/zen-tab/ld-wasm-lib"
+repository = "https://github.com/echosonusharma/tabaru/ld-wasm-lib"
 license = "GPL-3.0"
 
 [lib]

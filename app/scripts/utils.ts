@@ -33,7 +33,7 @@ export class Store<T> {
 }
 
 export function logger(...args: any[]): void {
-  console.log("\x1b[95m%s\x1b[0m", "ZenTab:", ...args);
+  console.log("\x1b[95m%s\x1b[0m", "Tabaru:", ...args);
 }
 
 export async function broadcastMsgToServiceWorker(data: ExtensionMessage): Promise<any> {

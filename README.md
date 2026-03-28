@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="app/images/zentab-icon.svg" width="128" height="128" alt="ZenTab Icon">
+  <img src="app/images/tabaru-icon.svg" width="128" height="128" alt="Tabaru Icon">
 </p>
 
-<h1 align="center">ZenTab</h1>
+<h1 align="center">Tabaru</h1>
 
 <p align="center">
-  <b>ZenTab</b> is a lightweight browser extension for efficient tab management. It provides quick navigation and fuzzy search capabilities to help manage multiple open tabs.
+  <b>Tabaru</b> is a lightweight browser extension for efficient tab management. It provides quick navigation and fuzzy search capabilities to help manage multiple open tabs.
 </p>
 
 ## Features

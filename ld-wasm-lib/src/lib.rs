@@ -140,7 +140,7 @@ pub fn init_wasm(name: &str) {
     // log rust panics in browser console
     console_error_panic_hook::set_once();
 
-    let w = format!("ZenTab: {}!", name);
+    let w = format!("Tabaru: {}!", name);
     unsafe {
         log(&w);
     };

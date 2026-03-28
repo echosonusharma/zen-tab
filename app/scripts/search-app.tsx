@@ -48,7 +48,7 @@ function extractDomain(url?: string): string {
 }
 
 function TabComponent({ tab, isActive }: { tab: TabInfo; isActive: boolean }) {
-  const [iconUrl, setIconUrl] = useState(tab.favIconUrl || browser.runtime.getURL("images/zentab-icon.svg"));
+  const [iconUrl, setIconUrl] = useState(tab.favIconUrl || browser.runtime.getURL("images/tabaru-icon.svg"));
 
   useEffect(() => {
     getFavicon(tab.favIconUrl).then((url) => {
@@ -61,8 +61,8 @@ function TabComponent({ tab, isActive }: { tab: TabInfo; isActive: boolean }) {
       <img
         src={iconUrl}
         onError={(e) => {
-          if (iconUrl !== browser.runtime.getURL("images/zentab-icon.svg")) {
-            setIconUrl(browser.runtime.getURL("images/zentab-icon.svg"));
+          if (iconUrl !== browser.runtime.getURL("images/tabaru-icon.svg")) {
+            setIconUrl(browser.runtime.getURL("images/tabaru-icon.svg"));
           }
         }}
         alt=""
@@ -167,7 +167,7 @@ export function SearchApp({ onClose }: SearchAppProps) {
   };
 
   return (
-    <div id="zen-tab-content">
+    <div id="tabaru-content">
       <div className="header">
         <SearchIcon />
         <input

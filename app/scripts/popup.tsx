@@ -37,7 +37,7 @@ function Popup() {
               overflow: hidden !important;
               padding: 0 !important;
             }
-            #zen-tab-content {
+            #tabaru-content {
               border: none !important;
               position: relative !important;
               top: 0 !important;
