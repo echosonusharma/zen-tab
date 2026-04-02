@@ -15,6 +15,9 @@
 - Keyboard-centric interface.
 - Cross-browser support (Chrome, Firefox, Edge, Opera).
 
+> **Compatibility Note:** Tabaru is most suitable for Chromium-based browsers (Chrome, Edge, Brave, Opera). While Firefox is supported, you may encounter minor issues.
+
+
 ## Suggested Keyboard Shortcuts
 
 - Open Search Modal: `Alt+Q`
