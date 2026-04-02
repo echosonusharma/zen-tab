@@ -5,8 +5,8 @@ export type TabData = Record<number, number[]>;
 export type ExtensionMessage =
   | { action: "getCurrentWindowId" }
   | { action: "closeSearchTab" }
-  | { action: "switchToTab"; data: { tabId: number } }
-  | { action: "getCurrentWindowTabs" }
+  | { action: "switchToTab"; data: { tabId: number; windowId?: number } }
+  | { action: "getAllTabs" }
   | { action: "orderTabsBySearchKeyword"; data: { searchKeyword: string; tabs: TabInfo[] } }
   | { action: "fetchFavicon"; data: { iconUrl: string } };
 
@@ -19,4 +19,5 @@ export interface TabInfo extends Tabs.Tab {
   keywords?: string[];
   ld?: number;
   fts?: number;
+  inCurrentWindow?: boolean;
 }

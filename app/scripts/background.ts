@@ -69,11 +69,14 @@ browser.runtime.onMessage.addListener(
         return (await activeWindowIdStore.get()) as number;
 
       case "switchToTab":
+        if (msg.data.windowId) {
+          await browser.windows.update(msg.data.windowId, { focused: true });
+        }
         await browser.tabs.update(msg.data.tabId, { active: true });
         return true;
 
-      case "getCurrentWindowTabs":
-        return await getTabsInCurrentWindow();
+      case "getAllTabs":
+        return await getAllSearchableTabs();
 
       case "orderTabsBySearchKeyword":
         return orderTabsBySearchKeyword(msg.data.searchKeyword, msg.data.tabs);
@@ -370,18 +373,20 @@ async function updateTabStores(tabQueryOptions: browser.Tabs.QueryQueryInfoType 
 
 const NEW_TAB_URLS = getNewTabUrls();
 
-async function getTabsInCurrentWindow(): Promise<TabInfo[]> {
+async function getAllSearchableTabs(): Promise<TabInfo[]> {
   try {
-    const allTabs = (await browser.tabs.query({ currentWindow: true })) as TabInfo[];
+    const allTabs = (await browser.tabs.query({})) as TabInfo[];
+    const currentWindowId = await activeWindowIdStore.get();
     const tabs = allTabs.filter(({ url = "" }) => !NEW_TAB_URLS.has(url));
 
     for (const tab of tabs) {
       tab.keywords = generate_keyword_for_tab(tab.title, tab.url);
+      tab.inCurrentWindow = tab.windowId === currentWindowId;
     }
 
     return tabs;
   } catch (error) {
-    logger("Failed to get current window tabs:", error);
+    logger("Failed to get all tabs:", error);
     return [];
   }
 }

@@ -31,11 +31,13 @@ function Popup() {
             html, body {
               box-sizing: border-box !important;
               height: fit-content !important;
+              max-height: 600px !important;
               margin: 0 !important;
+              overflow: hidden !important;
             }
             body {
-              overflow: hidden !important;
               padding: 0 !important;
+              border: none !important;
             }
             #tabaru-content {
               border: none !important;
@@ -45,10 +47,11 @@ function Popup() {
               transform: none !important;
               height: auto !important;
               min-height: 100% !important;
-              max-height: none !important;
+              max-height: 600px !important;
               box-shadow: none !important;
               border-radius: 0 !important;
               width: 100% !important;
+              max-width: none !important;
             }
           `;
           document.head.appendChild(style);
@@ -74,7 +77,7 @@ function Popup() {
 
   useEffect(() => {
     if (!isSearchMode) return;
-    
+
     const port = browser.runtime.connect({ name: "popupSearchMode" });
 
     const handleCommand = (command: string) => {

@@ -34,7 +34,8 @@
 
 #tabaru-content {
   width: 560px !important;
-  max-height: 460px !important;
+  max-width: calc(100vw - 32px) !important;
+  max-height: min(460px, calc(100vh - 32px)) !important;
   background: rgba(30, 30, 30, 0.78) !important;
   backdrop-filter: blur(40px) saturate(1.8) !important;
   -webkit-backdrop-filter: blur(40px) saturate(1.8) !important;
@@ -157,8 +158,10 @@
   padding: 4px 8px 8px 8px !important;
   margin: 0 !important;
   list-style: none !important;
-  max-height: 360px !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
   overflow-y: auto !important;
+  overflow-x: hidden !important;
   box-sizing: border-box !important;
   scroll-behavior: smooth !important;
 }
@@ -236,14 +239,19 @@
 }
 
 #tabaru-content .tab-info {
-  flex: 1 !important;
+  flex: 1 1 0% !important;
   min-width: 0 !important;
+  overflow: hidden !important;
   display: flex !important;
   flex-direction: column !important;
+  align-items: stretch !important;
+  text-align: left !important;
   gap: 2px !important;
 }
 
 #tabaru-content .tab-title {
+  display: block !important;
+  width: 100% !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
@@ -256,6 +264,8 @@
 }
 
 #tabaru-content .tab-url {
+  display: block !important;
+  width: 100% !important;
   white-space: nowrap !important;
   overflow: hidden !important;
   text-overflow: ellipsis !important;
@@ -265,6 +275,27 @@
   margin: 0 !important;
   padding: 0 !important;
   color: rgba(255, 255, 255, 0.3) !important;
+}
+
+#tabaru-content .window-badge {
+  display: flex !important;
+  align-items: center !important;
+  flex-shrink: 0 !important;
+  gap: 5px !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  color: rgba(255, 255, 255, 0.45) !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+  padding: 4px 8px !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  margin-left: auto !important;
+  white-space: nowrap !important;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+#tabaru-content .window-badge svg {
+  opacity: 0.8 !important;
 }
 
 /* ── Empty State ───────────────────────────────────────────────────────── */
