@@ -73,3 +73,7 @@ npm run release
 - Built with [WebExtension Toolbox](https://github.com/webextension-toolbox/webextension-toolbox)
 - Icons created with help of [App Icon Maker](https://appiconmaker.co/)
 - Inspired by the [Shortkeys Extension](https://github.com/crittermike/shortkeys)
+
+## Privacy
+
+Please see our [Privacy Policy](PRIVACY_POLICY.md) for details on permissions and data handling.
