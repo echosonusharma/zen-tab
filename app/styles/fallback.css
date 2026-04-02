@@ -1,0 +1,29 @@
+html.fallback-mode, body.fallback-mode {
+  box-sizing: border-box !important;
+  height: fit-content !important;
+  max-height: 600px !important;
+  margin: 0 !important;
+  overflow: hidden !important;
+}
+
+body.fallback-mode {
+  padding: 0 !important;
+  border: none !important;
+  width: 560px !important;
+  min-height: 145px !important;
+}
+
+body.fallback-mode #tabaru-content {
+  border: none !important;
+  position: relative !important;
+  top: 0 !important;
+  left: 0 !important;
+  transform: none !important;
+  height: auto !important;
+  min-height: 100% !important;
+  max-height: 600px !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  width: 100% !important;
+  max-width: none !important;
+}

@@ -20,4 +20,5 @@ export interface TabInfo extends Tabs.Tab {
   ld?: number;
   fts?: number;
   inCurrentWindow?: boolean;
+  matchIndex?: number;
 }

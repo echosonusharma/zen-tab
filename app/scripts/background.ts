@@ -3,7 +3,7 @@ import { ExtensionMessage, StoreType, TabData, TabInfo } from "./types";
 import { Store, getNewTabUrls, logger, openShortcutSettings } from "./utils";
 import initWasmModule, { init_wasm, generate_keyword_for_tab, ld } from "ld-wasm-lib";
 
-initWasmModule()
+const wasmReadyPromise = initWasmModule()
   .then(() => {
     init_wasm("wasm module loaded successfully");
   })
@@ -79,6 +79,7 @@ browser.runtime.onMessage.addListener(
         return await getAllSearchableTabs();
 
       case "orderTabsBySearchKeyword":
+        await wasmReadyPromise;
         return orderTabsBySearchKeyword(msg.data.searchKeyword, msg.data.tabs);
 
       case "fetchFavicon":
@@ -359,8 +360,14 @@ async function updateTabStores(tabQueryOptions: browser.Tabs.QueryQueryInfoType 
     }, {});
 
     if (existingTabsData) {
-      Object.assign(existingTabsData, tabsByWindowId);
-      await tabsStore.set(existingTabsData);
+      const isQueryingAllTabs = Object.keys(tabQueryOptions).length === 0;
+
+      if (isQueryingAllTabs) {
+        await tabsStore.set(tabsByWindowId);
+      } else {
+        Object.assign(existingTabsData, tabsByWindowId);
+        await tabsStore.set(existingTabsData);
+      }
     } else {
       await tabsStore.set(tabsByWindowId);
     }
@@ -375,6 +382,7 @@ const NEW_TAB_URLS = getNewTabUrls();
 
 async function getAllSearchableTabs(): Promise<TabInfo[]> {
   try {
+    await wasmReadyPromise;
     const allTabs = (await browser.tabs.query({})) as TabInfo[];
     const currentWindowId = await activeWindowIdStore.get();
     const tabs = allTabs.filter(({ url = "" }) => !NEW_TAB_URLS.has(url));
@@ -404,7 +412,7 @@ function orderTabsBySearchKeyword(searchKeyword: string, tabs: TabInfo[]): TabIn
     if (matchIndex !== -1) {
       tab.fts = 1;
       tab.ld = 0; // Skip WASM entirely! Zero distance is perfect.
-      (tab as any).matchIndex = matchIndex;
+      tab.matchIndex = matchIndex;
       continue;
     }
 
@@ -412,7 +420,7 @@ function orderTabsBySearchKeyword(searchKeyword: string, tabs: TabInfo[]): TabIn
     const keywords = tab.keywords ?? [];
     tab.fts = 0;
     tab.ld = keywords.length > 0 ? Math.min(...keywords.map((w) => ld(sk, w.toLowerCase()))) : Infinity;
-    (tab as any).matchIndex = Infinity;
+    tab.matchIndex = Infinity;
   }
 
   tabs.sort((a, b) => {
@@ -426,7 +434,7 @@ function orderTabsBySearchKeyword(searchKeyword: string, tabs: TabInfo[]): TabIn
 
     // If BOTH are FTS matches, rank by which match happens earlier in the string
     if (ftsA === 1 && ftsB === 1) {
-      return (a as any).matchIndex - (b as any).matchIndex;
+      return (a.matchIndex ?? Infinity) - (b.matchIndex ?? Infinity);
     }
 
     // If NEITHER are FTS matches, rank by Levenshtein distance
@@ -441,13 +449,26 @@ const FAVICON_TTL = 24 * 60 * 60 * 1000;
 let faviconMemoryCache: Record<string, any> | null = null;
 
 async function handleFetchFavicon(iconUrl: string): Promise<string> {
+  const now = Date.now();
+
   if (!faviconMemoryCache) {
     const result = await browser.storage.local.get(FAVICON_CACHE_KEY);
     faviconMemoryCache = result[FAVICON_CACHE_KEY] || {};
+
+    let hasStaleEntries = false;
+    for (const key of Object.keys(faviconMemoryCache)) {
+      if (now - faviconMemoryCache[key].timestamp >= FAVICON_TTL) {
+        delete faviconMemoryCache[key];
+        hasStaleEntries = true;
+      }
+    }
+
+    if (hasStaleEntries) {
+      await browser.storage.local.set({ [FAVICON_CACHE_KEY]: faviconMemoryCache });
+    }
   }
 
-  const entry = faviconMemoryCache![iconUrl];
-  const now = Date.now();
+  const entry = faviconMemoryCache[iconUrl];
 
   if (entry && now - entry.timestamp < FAVICON_TTL) {
     return entry.data;

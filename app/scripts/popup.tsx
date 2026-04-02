@@ -5,6 +5,7 @@ import { Store, openShortcutSettings } from "./utils";
 import { StoreType } from './types';
 import '../styles/popup.css';
 import '../styles/content.css';
+import '../styles/fallback.css';
 import { SearchApp } from "./search-app";
 
 const searchTabStore: Store<boolean> = new Store("searchTab", StoreType.LOCAL);
@@ -23,38 +24,8 @@ function Popup() {
         const fallbackTimestamp = await searchFallbackStore.get() as number;
         if (fallbackTimestamp && Date.now() - fallbackTimestamp < FALLBACK_TIMEOUT) {
           setIsSearchMode(true);
-          document.body.style.width = '560px';
-          document.body.style.minHeight = '145px';
-
-          const style = document.createElement('style');
-          style.innerText = `
-            html, body {
-              box-sizing: border-box !important;
-              height: fit-content !important;
-              max-height: 600px !important;
-              margin: 0 !important;
-              overflow: hidden !important;
-            }
-            body {
-              padding: 0 !important;
-              border: none !important;
-            }
-            #tabaru-content {
-              border: none !important;
-              position: relative !important;
-              top: 0 !important;
-              left: 0 !important;
-              transform: none !important;
-              height: auto !important;
-              min-height: 100% !important;
-              max-height: 600px !important;
-              box-shadow: none !important;
-              border-radius: 0 !important;
-              width: 100% !important;
-              max-width: none !important;
-            }
-          `;
-          document.head.appendChild(style);
+          document.documentElement.classList.add('fallback-mode');
+          document.body.classList.add('fallback-mode');
 
           await searchFallbackStore.set(0);
           return;
