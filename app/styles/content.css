@@ -7,6 +7,7 @@
     opacity: 0;
     transform: translate(-50%, -48%) scale(0.96);
   }
+
   to {
     opacity: 1;
     transform: translate(-50%, -50%) scale(1);
@@ -14,8 +15,13 @@
 }
 
 @keyframes zen-backdrop-in {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
 }
 
 /* ── Backdrop ──────────────────────────────────────────────────────────── */
@@ -193,10 +199,14 @@
   color: #f0f0f0 !important;
   display: flex !important;
   align-items: center !important;
-  margin: 0 !important;
+  margin: 0 0 4px 0 !important;
   background: transparent !important;
   border-radius: 8px !important;
   gap: 12px !important;
+}
+
+#tabaru-content .search-results .tab-item:last-child {
+  margin-bottom: 0 !important;
 }
 
 #tabaru-content .tab-item:hover {
@@ -209,6 +219,18 @@
 
 #tabaru-content .tab-item.selected:hover {
   background: rgba(207, 167, 56, 0.18) !important;
+}
+
+#tabaru-content .tab-item.recent-tab {
+  background: rgba(120, 181, 255, 0.05) !important;
+}
+
+#tabaru-content .tab-item.recent-tab:hover {
+  background: rgba(120, 181, 255, 0.1) !important;
+}
+
+#tabaru-content .tab-item.recent-tab.selected {
+  background: rgba(120, 181, 255, 0.16) !important;
 }
 
 /* Active tab accent bar */
@@ -292,6 +314,22 @@
   margin-left: auto !important;
   white-space: nowrap !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+#tabaru-content .history-badge {
+  display: flex !important;
+  align-items: center !important;
+  flex-shrink: 0 !important;
+  gap: 5px !important;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  color: rgba(120, 181, 255, 0.9) !important;
+  background: rgba(120, 181, 255, 0.12) !important;
+  padding: 4px 8px !important;
+  border-radius: 999px !important;
+  border: 1px solid rgba(120, 181, 255, 0.2) !important;
+  margin-left: auto !important;
+  white-space: nowrap !important;
 }
 
 #tabaru-content .window-badge svg {

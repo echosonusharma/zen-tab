@@ -1,5 +1,5 @@
 import browser from "webextension-polyfill";
-import { ExtensionMessage, StoreType, TabData, TabInfo } from "./types";
+import { ExtensionMessage, OpenTabInfo, SearchableTab, StoreType, TabData, TabInfo } from "./types";
 import { Store, getNewTabUrls, logger, openShortcutSettings } from "./utils";
 import initWasmModule, { init_wasm, generate_keyword_for_tab, ld } from "ld-wasm-lib";
 
@@ -74,6 +74,9 @@ browser.runtime.onMessage.addListener(
         }
         await browser.tabs.update(msg.data.tabId, { active: true });
         return true;
+
+      case "restoreRecentlyClosed":
+        return await restoreRecentlyClosedSession(msg.data.sessionId);
 
       case "getAllTabs":
         return await getAllSearchableTabs();
@@ -380,26 +383,97 @@ async function updateTabStores(tabQueryOptions: browser.Tabs.QueryQueryInfoType 
 
 const NEW_TAB_URLS = getNewTabUrls();
 
-async function getAllSearchableTabs(): Promise<TabInfo[]> {
+async function getAllSearchableTabs(): Promise<SearchableTab[]> {
   try {
     await wasmReadyPromise;
-    const allTabs = (await browser.tabs.query({})) as TabInfo[];
-    const currentWindowId = await activeWindowIdStore.get();
-    const tabs = allTabs.filter(({ url = "" }) => !NEW_TAB_URLS.has(url));
+    const [allTabs, currentWindowId, recentTabs] = await Promise.all([
+      browser.tabs.query({}) as Promise<TabInfo[]>,
+      activeWindowIdStore.get(),
+      getRecentlyClosedTabs(),
+    ]);
 
-    for (const tab of tabs) {
+    const openTabs = allTabs
+      .filter(({ url = "" }) => !NEW_TAB_URLS.has(url))
+      .map((tab) => ({
+        ...tab,
+        source: "open" as const,
+        resultId: `open:${tab.id}`,
+      })) as OpenTabInfo[];
+
+    for (const tab of openTabs) {
       tab.keywords = generate_keyword_for_tab(tab.title, tab.url);
       tab.inCurrentWindow = tab.windowId === currentWindowId;
     }
 
-    return tabs;
+    return [...openTabs, ...recentTabs];
   } catch (error) {
     logger("Failed to get all tabs:", error);
     return [];
   }
 }
 
-function orderTabsBySearchKeyword(searchKeyword: string, tabs: TabInfo[]): TabInfo[] {
+const NO_OF_RECENT_TABS = 6;
+
+async function getRecentlyClosedTabs(): Promise<SearchableTab[]> {
+  if (!browser.sessions?.getRecentlyClosed) {
+    return [];
+  }
+
+  try {
+    const sessions = await browser.sessions.getRecentlyClosed({ maxResults: NO_OF_RECENT_TABS });
+    const seenUrls = new Set<string>();
+
+    return sessions
+      .filter((session) => session.tab)
+      .map((session) => {
+        const recentTab = session.tab!;
+        const sessionId = recentTab.sessionId;
+
+        if (!sessionId) {
+          return null;
+        }
+
+        return {
+          source: "recent" as const,
+          resultId: `recent:${sessionId}`,
+          sessionId,
+          title: recentTab.title,
+          url: recentTab.url,
+          favIconUrl: recentTab.favIconUrl,
+          windowId: recentTab.windowId,
+          keywords: generate_keyword_for_tab(recentTab.title, recentTab.url),
+        };
+      })
+      .filter((tab): tab is Exclude<typeof tab, null> => tab !== null)
+      .filter(({ url = "" }) => {
+        if (seenUrls.has(url)) {
+          return false;
+        }
+        seenUrls.add(url);
+
+        return !NEW_TAB_URLS.has(url);
+      });
+  } catch (error) {
+    logger("Failed to get recently closed tabs:", error);
+    return [];
+  }
+}
+
+async function restoreRecentlyClosedSession(sessionId: string): Promise<boolean> {
+  if (!browser.sessions?.restore) {
+    return false;
+  }
+
+  try {
+    await browser.sessions.restore(sessionId);
+    return true;
+  } catch (error) {
+    logger("Failed to restore recently closed tab:", error);
+    return false;
+  }
+}
+
+function orderTabsBySearchKeyword(searchKeyword: string, tabs: SearchableTab[]): SearchableTab[] {
   const sk = searchKeyword.toLowerCase();
 
   if (!sk) return tabs;

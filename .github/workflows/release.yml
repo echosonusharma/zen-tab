@@ -50,7 +50,7 @@ jobs:
       - name: Get commit messages
         id: commits
         run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 ${{ github.ref_name }}^)
+          PREV_TAG=$(git describe --tags --abbrev=0 ${{ github.ref_name }}^ 2>/dev/null || git rev-list --max-parents=0 HEAD)
           COMMITS=$(git log --pretty=format:"%s #%h" $PREV_TAG..${{ github.ref_name }})
           echo "commits<<EOF" >> $GITHUB_OUTPUT
           echo "$COMMITS" >> $GITHUB_OUTPUT

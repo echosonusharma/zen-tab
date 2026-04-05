@@ -2,7 +2,7 @@ import { h, Fragment } from "preact";
 import browser from "webextension-polyfill";
 import { useEffect, useState, useRef } from "preact/hooks";
 import { broadcastMsgToServiceWorker } from "./utils";
-import { TabInfo } from "./types";
+import { SearchableTab } from "./types";
 
 async function getFavicon(iconUrl: string | undefined): Promise<string> {
   if (!iconUrl || iconUrl.startsWith("data:")) return iconUrl || "";
@@ -47,9 +47,20 @@ function extractDomain(url?: string): string {
   }
 }
 
-function TabComponent({ tab, isActive }: { tab: TabInfo; isActive: boolean }) {
+function HistoryIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M3 3v5h5" />
+      <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
+      <path d="M12 7v5l3 3" />
+    </svg>
+  );
+}
+
+function TabComponent({ tab }: { tab: SearchableTab }) {
   const fallbackIconUrl = browser.runtime.getURL("images/tabaru-icon.svg");
   const [iconUrl, setIconUrl] = useState(fallbackIconUrl);
+  const isRecentlyClosed = tab.source === "recent";
 
   useEffect(() => {
     getFavicon(tab.favIconUrl).then((url) => {
@@ -75,7 +86,13 @@ function TabComponent({ tab, isActive }: { tab: TabInfo; isActive: boolean }) {
         <span className="tab-title">{tab.title}</span>
         <span className="tab-url">{extractDomain(tab.url)}</span>
       </div>
-      {!tab.inCurrentWindow && (
+      {isRecentlyClosed && (
+        <div className="history-badge" title="Recently closed tab">
+          <HistoryIcon />
+          <span>Recently Closed</span>
+        </div>
+      )}
+      {tab.source === "open" && !tab.inCurrentWindow && (
         <div className="window-badge" title="In another window">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -94,8 +111,8 @@ interface SearchAppProps {
 
 export function SearchApp({ onClose }: SearchAppProps) {
   const [searchQuery, setSearchQuery] = useState("");
-  const [tabs, setTabs] = useState<TabInfo[]>([]);
-  const [filteredTabs, setFilteredTabs] = useState<TabInfo[]>([]);
+  const [tabs, setTabs] = useState<SearchableTab[]>([]);
+  const [filteredTabs, setFilteredTabs] = useState<SearchableTab[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const resultsRef = useRef<HTMLUListElement>(null);
@@ -105,7 +122,7 @@ export function SearchApp({ onClose }: SearchAppProps) {
 
     const fetchTabs = async () => {
       try {
-        const tabs = (await broadcastMsgToServiceWorker({ action: "getAllTabs" })) as TabInfo[];
+        const tabs = (await broadcastMsgToServiceWorker({ action: "getAllTabs" })) as SearchableTab[];
         setTabs(tabs);
       } catch (error) {
         console.error("Error fetching tabs:", error);
@@ -123,7 +140,7 @@ export function SearchApp({ onClose }: SearchAppProps) {
         action: "orderTabsBySearchKeyword",
         data: { searchKeyword: searchQuery, tabs },
       })
-        .then((res) => setFilteredTabs(res as TabInfo[]))
+        .then((res) => setFilteredTabs(res as SearchableTab[]))
         .catch((e) => console.error("Search error:", e));
     }
     setSelectedIndex(0);
@@ -143,10 +160,19 @@ export function SearchApp({ onClose }: SearchAppProps) {
     e.stopPropagation();
   };
 
-  const handleTabClick = (tab: TabInfo) => {
+  const handleTabClick = (tab: SearchableTab) => {
+    if (onClose) onClose();
+
+    if (tab.source === "recent") {
+      broadcastMsgToServiceWorker({
+        action: "restoreRecentlyClosed",
+        data: { sessionId: tab.sessionId },
+      }).catch(console.error);
+      return;
+    }
+
     const tabId = tab.id as number;
     const windowId = tab.windowId;
-    if (onClose) onClose();
     broadcastMsgToServiceWorker({ action: "switchToTab", data: { tabId, windowId } }).catch(console.error);
   };
 
@@ -200,28 +226,29 @@ export function SearchApp({ onClose }: SearchAppProps) {
       {filteredTabs.length > 0 ? (
         <Fragment>
           <div className="tab-count">
-            {filteredTabs.length} tab{filteredTabs.length !== 1 ? "s" : ""}
+            {filteredTabs.length} result{filteredTabs.length !== 1 ? "s" : ""}
           </div>
           <ul className="search-results" ref={resultsRef}>
             {filteredTabs.map((tab, index) => (
               <li
-                key={tab.id}
+                key={tab.resultId}
                 onClick={() => handleTabClick(tab)}
                 className={[
                   "tab-item",
                   index === selectedIndex ? "selected" : "",
-                  tab.active ? "active-tab" : "",
+                  tab.source === "open" && tab.active ? "active-tab" : "",
+                  tab.source === "recent" ? "recent-tab" : "",
                 ]
                   .filter(Boolean)
                   .join(" ")}
               >
-                <TabComponent tab={tab} isActive={!!tab.active} />
+                <TabComponent tab={tab} />
               </li>
             ))}
           </ul>
         </Fragment>
       ) : (
-        <div className="no-results">No tabs found</div>
+        <div className="no-results">No matching tabs found</div>
       )}
 
       <div className="keyboard-hint">
