@@ -70,7 +70,7 @@
 #tabaru-content .header {
   display: flex !important;
   align-items: center !important;
-  padding: 16px 16px 0 16px !important;
+  padding: 16px !important;
   position: relative !important;
   box-sizing: border-box !important;
   gap: 8px !important;
@@ -80,7 +80,7 @@
   position: absolute !important;
   left: 28px !important;
   top: 50% !important;
-  transform: translateY(-20%) !important;
+  transform: translateY(-50%) !important;
   width: 16px !important;
   height: 16px !important;
   color: rgba(255, 255, 255, 0.35) !important;
@@ -124,7 +124,7 @@
   position: absolute !important;
   right: 26px !important;
   top: 50% !important;
-  transform: translateY(-20%) !important;
+  transform: translateY(-50%) !important;
   background: none !important;
   border: none !important;
   color: rgba(255, 255, 255, 0.3) !important;
@@ -145,6 +145,16 @@
 #tabaru-content .close-button:hover {
   background: rgba(255, 255, 255, 0.08) !important;
   color: #f0f0f0 !important;
+}
+
+/* ── Main Body Container ───────────────────────────────────────────────── */
+
+#tabaru-content .body {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  min-height: 0 !important;
+  position: relative !important;
 }
 
 /* ── Tab Count ─────────────────────────────────────────────────────────── */
@@ -203,6 +213,19 @@
   background: transparent !important;
   border-radius: 8px !important;
   gap: 12px !important;
+  animation: tab-in 0.2s ease-out backwards !important;
+}
+
+@keyframes tab-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 #tabaru-content .search-results .tab-item:last-child {
@@ -340,11 +363,21 @@
 
 #tabaru-content .no-results {
   text-align: center !important;
-  color: rgba(255, 255, 255, 0.3) !important;
-  padding: 40px 20px !important;
-  font-size: 13px !important;
-  font-weight: 500 !important;
+  color: rgba(255, 255, 255, 0.25) !important;
+  padding: 60px 40px !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
   margin: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 12px !important;
+}
+
+#tabaru-content .no-results::before {
+  content: "🔍" !important;
+  font-size: 24px !important;
+  opacity: 0.5 !important;
 }
 
 /* ── Keyboard Hint ─────────────────────────────────────────────────────── */
@@ -369,4 +402,112 @@
   font-family: -apple-system, BlinkMacSystemFont, 'SF Mono', monospace !important;
   color: rgba(255, 255, 255, 0.4) !important;
   margin: 0 2px !important;
+}
+
+/* ── Command Mode ─────────────────────────────────────────────────────── */
+
+
+/* Search input glow when command mode is active */
+#tabaru-content .search-input.command-active {
+  box-shadow: 0 0 0 1.5px rgba(168, 130, 255, 0.55) !important;
+  background: rgba(168, 130, 255, 0.08) !important;
+}
+
+#tabaru-content .search-input.command-active:focus {
+  box-shadow: 0 0 0 1.5px rgba(168, 130, 255, 0.7) !important;
+  background: rgba(168, 130, 255, 0.12) !important;
+}
+
+/* ── Command Badge (in header, right side) ────────────────────────────── */
+
+
+/* ── Command Panel (replaces tab list) ────────────────────────────────── */
+
+#tabaru-content .command-panel {
+  display: flex !important;
+  align-items: center !important;
+  gap: 16px !important;
+  padding: 24px !important;
+  margin: 16px !important;
+  border-radius: 12px !important;
+  background: rgba(168, 130, 255, 0.05) !important;
+  border: 1px solid rgba(168, 130, 255, 0.1) !important;
+  min-height: 280px !important;
+  justify-content: center !important;
+  flex-direction: column !important;
+  text-align: center !important;
+}
+
+#tabaru-content .command-panel-icon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 8px !important;
+  background: rgba(168, 130, 255, 0.15) !important;
+  color: rgba(168, 130, 255, 0.9) !important;
+  flex-shrink: 0 !important;
+}
+
+#tabaru-content .command-panel-icon svg {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+#tabaru-content .command-panel-info {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  margin-bottom: 20px !important;
+}
+
+
+#tabaru-content .command-panel-desc {
+  font-size: 13px !important;
+  font-weight: 400 !important;
+  color: rgba(255, 255, 255, 0.45) !important;
+  max-width: 320px !important;
+  line-height: 1.5 !important;
+}
+
+#tabaru-content .command-panel-keyword {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  flex-shrink: 1 !important;
+  font-size: 12px !important;
+  font-weight: 500 !important;
+  color: rgba(168, 130, 255, 0.85) !important;
+  background: rgba(168, 130, 255, 0.1) !important;
+  padding: 6px 10px !important;
+  border-radius: 6px !important;
+  border: 1px solid rgba(168, 130, 255, 0.18) !important;
+  max-width: 180px !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+#tabaru-content .command-panel-keyword span {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+#tabaru-content .command-panel-keyword kbd {
+  background: rgba(168, 130, 255, 0.18) !important;
+  border: 1px solid rgba(168, 130, 255, 0.25) !important;
+  border-radius: 3px !important;
+  padding: 1px 4px !important;
+  font-size: 10px !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Mono', monospace !important;
+  color: rgba(168, 130, 255, 0.95) !important;
+}
+
+#tabaru-content .command-panel-hint {
+  flex-shrink: 0 !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  font-style: italic !important;
+  color: rgba(255, 255, 255, 0.25) !important;
 }

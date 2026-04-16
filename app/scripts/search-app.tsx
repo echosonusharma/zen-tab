@@ -1,12 +1,34 @@
 import { h, Fragment } from "preact";
 import browser from "webextension-polyfill";
-import { useEffect, useState, useRef } from "preact/hooks";
+import { useEffect, useState, useRef, useMemo } from "preact/hooks";
 import { broadcastMsgToServiceWorker } from "./utils";
-import { SearchableTab } from "./types";
+import { SearchableTab, CommandDefinition } from "./types";
+import { SearchIcon, CommandIcon, HistoryIcon, WindowIcon } from "./icons";
+
+// command prefix will be ! and second char is the type of command
+// commands can only be 2 chars
+const COMMAND_PREFIX = "!";
+
+const COMMANDS: CommandDefinition[] = [
+  {
+    key: "s",
+    label: "Search",
+    description: "Search the web or navigate to a domain",
+    execute: (keyword: string) => {
+      broadcastMsgToServiceWorker({
+        action: "executeCommand",
+        data: { commandKey: "s", keyword },
+      }).catch(console.error);
+    },
+  },
+];
+
+const COMMAND_MAP = new Map<string, CommandDefinition>(
+  COMMANDS.map((cmd) => [cmd.key, cmd])
+);
 
 async function getFavicon(iconUrl: string | undefined): Promise<string> {
   if (!iconUrl || iconUrl.startsWith("data:")) return iconUrl || "";
-
   try {
     const result = await broadcastMsgToServiceWorker({
       action: "fetchFavicon",
@@ -16,25 +38,6 @@ async function getFavicon(iconUrl: string | undefined): Promise<string> {
   } catch {
     return iconUrl;
   }
-}
-
-function SearchIcon() {
-  return (
-    <svg
-      className="search-icon"
-      width="16"
-      height="16"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <circle cx="11" cy="11" r="8" />
-      <line x1="21" y1="21" x2="16.65" y2="16.65" />
-    </svg>
-  );
 }
 
 function extractDomain(url?: string): string {
@@ -47,16 +50,6 @@ function extractDomain(url?: string): string {
   }
 }
 
-function HistoryIcon() {
-  return (
-    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 3v5h5" />
-      <path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
-      <path d="M12 7v5l3 3" />
-    </svg>
-  );
-}
-
 function TabComponent({ tab }: { tab: SearchableTab }) {
   const fallbackIconUrl = browser.runtime.getURL("images/tabaru-icon.svg");
   const [iconUrl, setIconUrl] = useState(fallbackIconUrl);
@@ -64,9 +57,7 @@ function TabComponent({ tab }: { tab: SearchableTab }) {
 
   useEffect(() => {
     getFavicon(tab.favIconUrl).then((url) => {
-      if (url) {
-        setIconUrl(url);
-      }
+      if (url) setIconUrl(url);
     });
   }, [tab.favIconUrl]);
 
@@ -74,11 +65,7 @@ function TabComponent({ tab }: { tab: SearchableTab }) {
     <Fragment>
       <img
         src={iconUrl}
-        onError={(e) => {
-          if (iconUrl !== fallbackIconUrl) {
-            setIconUrl(fallbackIconUrl);
-          }
-        }}
+        onError={() => iconUrl !== fallbackIconUrl && setIconUrl(fallbackIconUrl)}
         alt=""
         className="tab-favicon"
       />
@@ -94,10 +81,7 @@ function TabComponent({ tab }: { tab: SearchableTab }) {
       )}
       {tab.source === "open" && !tab.inCurrentWindow && (
         <div className="window-badge" title="In another window">
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-          </svg>
+          <WindowIcon />
           <span>Other Window</span>
         </div>
       )}
@@ -105,34 +89,87 @@ function TabComponent({ tab }: { tab: SearchableTab }) {
   );
 }
 
-interface SearchAppProps {
-  onClose?: () => void;
+function KeyboardHints({ mode }: { mode: "command" | "suggest" | "normal" }) {
+  return (
+    <div className="keyboard-hint">
+      {mode === "command" && (
+        <Fragment>
+          <span><kbd>↵</kbd> execute</span>
+          <span><kbd>esc</kbd> close</span>
+        </Fragment>
+      )}
+      {mode === "suggest" && (
+        <Fragment>
+          <span><kbd>↑</kbd> <kbd>↓</kbd> pick command</span>
+          <span><kbd>space</kbd> or <kbd>↵</kbd> select</span>
+        </Fragment>
+      )}
+      {mode === "normal" && (
+        <Fragment>
+          <span><kbd>↑</kbd> <kbd>↓</kbd> navigate</span>
+          <span><kbd>↵</kbd> open</span>
+          <span><kbd>esc</kbd> close</span>
+          <span><kbd>!</kbd> commands</span>
+        </Fragment>
+      )}
+    </div>
+  );
 }
 
-export function SearchApp({ onClose }: SearchAppProps) {
+function useSearch() {
   const [searchQuery, setSearchQuery] = useState("");
   const [tabs, setTabs] = useState<SearchableTab[]>([]);
   const [filteredTabs, setFilteredTabs] = useState<SearchableTab[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-  const resultsRef = useRef<HTMLUListElement>(null);
+
+  const activeCommand = useMemo(() => {
+    const sq = searchQuery.trim();
+    if (!sq.startsWith(COMMAND_PREFIX)) {
+      return null;
+    }
+
+    if (sq.length < 3) {
+      return null;
+    }
+
+    const cmdChar = sq[1];
+    if (sq[2] !== " ") {
+      return null;
+    }
+
+    const cmd = COMMAND_MAP.get(cmdChar);
+    if (cmd) {
+      return { command: cmd, keyword: sq.slice(3) };
+    }
+
+    return null;
+  }, [searchQuery]);
+
+  const isCommandMode = activeCommand !== null;
+  const isSuggestingCommands = !isCommandMode && searchQuery.startsWith(COMMAND_PREFIX);
+
+  const commandSuggestions = useMemo(() => {
+    if (!isSuggestingCommands) {
+      return [];
+    }
+
+    const filter = searchQuery.trim().slice(1).toLowerCase();
+    return COMMANDS.filter(c => c.key.startsWith(filter) || c.label.toLowerCase().includes(filter));
+  }, [isSuggestingCommands, searchQuery]);
 
   useEffect(() => {
-    searchInputRef.current?.focus();
-
-    const fetchTabs = async () => {
-      try {
-        const tabs = (await broadcastMsgToServiceWorker({ action: "getAllTabs" })) as SearchableTab[];
-        setTabs(tabs);
-      } catch (error) {
-        console.error("Error fetching tabs:", error);
-      }
-    };
-
-    fetchTabs();
+    broadcastMsgToServiceWorker({ action: "getAllTabs" })
+      .then((res) => setTabs(res as SearchableTab[]))
+      .catch((e) => console.error("Error fetching tabs:", e));
   }, []);
 
   useEffect(() => {
+    if (isCommandMode || isSuggestingCommands) {
+      setFilteredTabs([]);
+      setSelectedIndex(0);
+      return;
+    }
+
     if (searchQuery.trim() === "") {
       setFilteredTabs(tabs);
     } else {
@@ -144,118 +181,170 @@ export function SearchApp({ onClose }: SearchAppProps) {
         .catch((e) => console.error("Search error:", e));
     }
     setSelectedIndex(0);
-  }, [searchQuery, tabs]);
+  }, [searchQuery, tabs, isCommandMode, isSuggestingCommands]);
 
-  // Scroll selected item into view
+  return {
+    searchQuery, setSearchQuery,
+    tabs, filteredTabs,
+    selectedIndex, setSelectedIndex,
+    activeCommand, isCommandMode,
+    isSuggestingCommands, commandSuggestions
+  };
+}
+
+export function SearchApp({ onClose }: { onClose?: () => void }) {
+  const {
+    searchQuery, setSearchQuery,
+    filteredTabs,
+    selectedIndex, setSelectedIndex,
+    activeCommand, isCommandMode,
+    isSuggestingCommands, commandSuggestions
+  } = useSearch();
+
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLUListElement>(null);
+
+  useEffect(() => searchInputRef.current?.focus(), []);
+
   useEffect(() => {
-    if (resultsRef.current && filteredTabs.length > 0) {
+    const totalItems = isSuggestingCommands ? commandSuggestions.length : filteredTabs.length;
+    if (resultsRef.current && totalItems > 0) {
       const selectedElement = resultsRef.current.children[selectedIndex] as HTMLElement;
       selectedElement?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     }
-  }, [selectedIndex, filteredTabs]);
+  }, [selectedIndex, filteredTabs.length, commandSuggestions.length, isSuggestingCommands]);
 
-  const handleSearch = (e: Event) => {
-    const target = e.target as HTMLInputElement;
-    setSearchQuery(target.value);
-    e.stopPropagation();
-  };
-
-  const handleTabClick = (tab: SearchableTab) => {
-    if (onClose) onClose();
-
-    if (tab.source === "recent") {
-      broadcastMsgToServiceWorker({
-        action: "restoreRecentlyClosed",
-        data: { sessionId: tab.sessionId },
-      }).catch(console.error);
-      return;
-    }
-
-    const tabId = tab.id as number;
-    const windowId = tab.windowId;
-    broadcastMsgToServiceWorker({ action: "switchToTab", data: { tabId, windowId } }).catch(console.error);
+  const selectCommand = (cmd: CommandDefinition) => {
+    setSearchQuery(`${COMMAND_PREFIX}${cmd.key} `);
+    setSelectedIndex(0);
   };
 
   const handleKeyDown = (e: KeyboardEvent) => {
+    const maxIndex = isSuggestingCommands ? commandSuggestions.length - 1 : filteredTabs.length - 1;
+
     switch (e.key) {
       case "Escape":
         if (onClose) onClose();
         return;
-
       case "ArrowDown":
         e.preventDefault();
-        setSelectedIndex((prev) => Math.min(prev + 1, filteredTabs.length - 1));
+        setSelectedIndex((prev) => Math.min(prev + 1, maxIndex));
         break;
-
       case "ArrowUp":
         e.preventDefault();
         setSelectedIndex((prev) => Math.max(prev - 1, 0));
         break;
-
       case "Enter":
-        if (filteredTabs.length > 0) {
-          const selectedTab = filteredTabs[selectedIndex];
-          if (selectedTab) {
-            handleTabClick(selectedTab);
+        if (isCommandMode) {
+          const keyword = activeCommand!.keyword.trim();
+          if (keyword) {
+            activeCommand!.command.execute(keyword);
+            if (onClose) onClose();
+          }
+        } else if (isSuggestingCommands) {
+          if (commandSuggestions.length > 0) selectCommand(commandSuggestions[selectedIndex]);
+        } else if (filteredTabs[selectedIndex]) {
+          const tab = filteredTabs[selectedIndex];
+          if (onClose) onClose();
+          if (tab.source === "recent") {
+            broadcastMsgToServiceWorker({ action: "restoreRecentlyClosed", data: { sessionId: tab.sessionId } });
+          } else {
+            broadcastMsgToServiceWorker({ action: "switchToTab", data: { tabId: tab.id!, windowId: tab.windowId } });
           }
         }
         break;
+      case " ":
+        if (isSuggestingCommands && commandSuggestions.length > 0) {
+          e.preventDefault();
+          selectCommand(commandSuggestions[selectedIndex]);
+        }
+        break;
     }
-
     e.stopPropagation();
   };
+
+  const mode = isCommandMode ? "command" : isSuggestingCommands ? "suggest" : "normal";
 
   return (
     <div id="tabaru-content">
       <div className="header">
-        <SearchIcon />
+        {isCommandMode ? <CommandIcon className="search-icon" /> : <SearchIcon className="search-icon" />}
         <input
           ref={searchInputRef}
           type="text"
-          className="search-input"
-          placeholder="Search tabs..."
+          className={`search-input${isCommandMode ? " command-active" : ""}`}
+          placeholder="Search tabs, or type ! for commands..."
           value={searchQuery}
-          onInput={handleSearch}
+          onInput={(e) => setSearchQuery((e.target as HTMLInputElement).value)}
           onKeyDown={handleKeyDown}
         />
-        <button className="close-button" onClick={() => onClose && onClose()}>
-          ×
-        </button>
+        <button className="close-button" onClick={() => onClose && onClose()}>×</button>
       </div>
 
-      {filteredTabs.length > 0 ? (
-        <Fragment>
-          <div className="tab-count">
-            {filteredTabs.length} result{filteredTabs.length !== 1 ? "s" : ""}
-          </div>
-          <ul className="search-results" ref={resultsRef}>
-            {filteredTabs.map((tab, index) => (
-              <li
-                key={tab.resultId}
-                onClick={() => handleTabClick(tab)}
-                className={[
-                  "tab-item",
-                  index === selectedIndex ? "selected" : "",
-                  tab.source === "open" && tab.active ? "active-tab" : "",
-                  tab.source === "recent" ? "recent-tab" : "",
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-              >
-                <TabComponent tab={tab} />
-              </li>
-            ))}
-          </ul>
-        </Fragment>
-      ) : (
-        <div className="no-results">No matching tabs found</div>
-      )}
-
-      <div className="keyboard-hint">
-        <span><kbd>↑</kbd> <kbd>↓</kbd> navigate</span>
-        <span><kbd>↵</kbd> open</span>
-        <span><kbd>esc</kbd> close</span>
+      <div className="body">
+        {isCommandMode ? (
+          <Fragment>
+            {/* during keyword entry after cmd selection we wont show any results for now */}
+          </Fragment>
+        ) : isSuggestingCommands ? (
+          <Fragment>
+            <div className="tab-count">Available Commands</div>
+            <ul className="search-results" ref={resultsRef}>
+              {commandSuggestions.map((cmd, index) => (
+                <li
+                  key={cmd.key}
+                  onClick={() => selectCommand(cmd)}
+                  className={`tab-item command-suggestion-item ${index === selectedIndex ? "selected" : ""}`}
+                >
+                  <div className="command-panel-icon" style={{ marginRight: '8px', background: 'rgba(168, 130, 255, 0.15)', color: 'rgba(168, 130, 255, 0.9)', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <CommandIcon />
+                  </div>
+                  <div className="tab-info">
+                    <span className="tab-url">{cmd.description}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </Fragment>
+        ) : (
+          <Fragment>
+            {filteredTabs.length > 0 ? (
+              <Fragment>
+                <div className="tab-count">
+                  {filteredTabs.length} result{filteredTabs.length !== 1 ? "s" : ""}
+                </div>
+                <ul className="search-results" ref={resultsRef}>
+                  {filteredTabs.map((tab, index) => (
+                    <li
+                      key={tab.resultId}
+                      onClick={() => {
+                        if (onClose) onClose();
+                        if (tab.source === "recent") {
+                          broadcastMsgToServiceWorker({ action: "restoreRecentlyClosed", data: { sessionId: tab.sessionId } });
+                        } else {
+                          broadcastMsgToServiceWorker({ action: "switchToTab", data: { tabId: tab.id!, windowId: tab.windowId } });
+                        }
+                      }}
+                      className={[
+                        "tab-item",
+                        index === selectedIndex ? "selected" : "",
+                        tab.source === "open" && tab.active ? "active-tab" : "",
+                        tab.source === "recent" ? "recent-tab" : "",
+                      ].filter(Boolean).join(" ")}
+                    >
+                      <TabComponent tab={tab} />
+                    </li>
+                  ))}
+                </ul>
+              </Fragment>
+            ) : (
+              <div className="no-results">No matching tabs found</div>
+            )}
+          </Fragment>
+        )}
       </div>
+
+      <KeyboardHints mode={mode} />
     </div>
   );
 }

@@ -13,7 +13,8 @@
     "sessions",
     "activeTab",
     "scripting",
-    "idle"
+    "idle",
+    "search"
   ],
   "__firefox__permissions": [
     "storage",
@@ -21,7 +22,8 @@
     "sessions",
     "activeTab",
     "scripting",
-    "idle"
+    "idle",
+    "search"
   ],
   "host_permissions": [
     "<all_urls>"

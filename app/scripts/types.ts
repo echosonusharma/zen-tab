@@ -9,7 +9,8 @@ export type ExtensionMessage =
   | { action: "restoreRecentlyClosed"; data: { sessionId: string } }
   | { action: "getAllTabs" }
   | { action: "orderTabsBySearchKeyword"; data: { searchKeyword: string; tabs: SearchableTab[] } }
-  | { action: "fetchFavicon"; data: { iconUrl: string } };
+  | { action: "fetchFavicon"; data: { iconUrl: string } }
+  | { action: "executeCommand"; data: { commandKey: string; keyword: string } };
 
 export enum StoreType {
   LOCAL = "local",
@@ -44,3 +45,14 @@ export interface OpenTabInfo extends TabInfo {
 }
 
 export type SearchableTab = OpenTabInfo | RecentlyClosedTabInfo;
+
+export interface CommandDefinition {
+  /** Single-character trigger, e.g. "s" */
+  key: string;
+  /** Human-readable label shown in the UI badge */
+  label: string;
+  /** Short description of what this command does */
+  description: string;
+  /** Action performed by the background script */
+  execute: (keyword: string) => void;
+}

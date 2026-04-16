@@ -88,6 +88,9 @@ browser.runtime.onMessage.addListener(
       case "fetchFavicon":
         return await handleFetchFavicon(msg.data.iconUrl);
 
+      case "executeCommand":
+        return await handleExecuteCommand(msg.data.commandKey, msg.data.keyword);
+
       default:
         return undefined;
     }
@@ -327,7 +330,6 @@ async function handleSearchCmd(activeTabId: number, activeWindowId: number): Pro
 
 async function initWindowAndTabData(): Promise<void> {
   const currentWindow = await browser.windows.getCurrent({});
-  logger("initWindowAndTabData", currentWindow);
 
   if (currentWindow.id) {
     await activeWindowIdStore.set(currentWindow.id);
@@ -571,5 +573,45 @@ async function handleFetchFavicon(iconUrl: string): Promise<string> {
     return dataUrl;
   } catch (error) {
     return entry?.data || "";
+  }
+}
+
+function looksLikeDomain(input: string): boolean {
+  try {
+    const url = new URL(
+      input.startsWith("http") ? input : `http://${input}`
+    );
+    return url.hostname.includes(".");
+  } catch {
+    return false;
+  }
+}
+
+async function handleSearch(keyword: string): Promise<boolean> {
+  if (looksLikeDomain(keyword)) {
+    const url = keyword.startsWith("http") ? keyword : `https://${keyword}`;
+    await browser.tabs.create({ url });
+  } else {
+    await browser.search.query({
+      text: keyword,
+      disposition: "NEW_TAB",
+    });
+  }
+  return true;
+}
+
+async function handleExecuteCommand(commandKey: string, keyword: string): Promise<boolean> {
+  try {
+    switch (commandKey) {
+      case "s": {
+        return await handleSearch(keyword);
+      }
+      default:
+        logger(`Unknown command key: ${commandKey}`);
+        return false;
+    }
+  } catch (error) {
+    logger(`Error executing command '${commandKey}':`, error);
+    return false;
   }
 }
