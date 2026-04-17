@@ -84,6 +84,12 @@
         "default": "Alt+Q"
       },
       "description": "open and close tab search modal"
+    },
+    "kill_tab": {
+      "suggested_key": {
+        "default": "Alt+W"
+      },
+      "description": "close the current tab"
     }
   }
 }
