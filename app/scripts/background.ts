@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 import { ExtensionMessage, OpenTabInfo, SearchableTab, StoreType, TabData, TabInfo } from "./types";
-import { Store, getNewTabUrls, logger, openShortcutSettings } from "./utils";
+import { Store, getNewTabUrls, logger, openShortcutSettings, looksLikeDomain } from "./utils";
 import initWasmModule, { init_wasm, generate_keyword_for_tab, ld } from "ld-wasm-lib";
 
 const wasmReadyPromise = initWasmModule()
@@ -19,6 +19,7 @@ const activeTabIdStore: Store<number> = new Store("activeTabId", StoreType.SESSI
 const activeWindowIdStore: Store<number> = new Store("activeWindowId", StoreType.SESSION);
 const searchTabStore: Store<boolean> = new Store("searchTab", StoreType.LOCAL);
 const searchFallbackStore: Store<number> = new Store("searchFallback", StoreType.SESSION);
+const commandHistoryStore: Store<Record<string, string[]>> = new Store("commandHistory", StoreType.LOCAL);
 
 // Runtime Events
 
@@ -90,6 +91,12 @@ browser.runtime.onMessage.addListener(
 
       case "executeCommand":
         return await handleExecuteCommand(msg.data.commandKey, msg.data.keyword);
+
+      case "recordCommand":
+        return await recordCommandHistory(msg.data.commandKey, msg.data.keyword);
+
+      case "getRecentCommands":
+        return await getCommandHistory(msg.data.commandKey);
 
       default:
         return undefined;
@@ -576,17 +583,6 @@ async function handleFetchFavicon(iconUrl: string): Promise<string> {
   }
 }
 
-function looksLikeDomain(input: string): boolean {
-  try {
-    const url = new URL(
-      input.startsWith("http") ? input : `http://${input}`
-    );
-    return url.hostname.includes(".");
-  } catch {
-    return false;
-  }
-}
-
 async function handleSearch(keyword: string): Promise<boolean> {
   if (looksLikeDomain(keyword)) {
     const url = keyword.startsWith("http") ? keyword : `https://${keyword}`;
@@ -598,6 +594,20 @@ async function handleSearch(keyword: string): Promise<boolean> {
     });
   }
   return true;
+}
+
+const MAX_COMMAND_HISTORY = 5;
+
+async function recordCommandHistory(commandKey: string, keyword: string): Promise<boolean> {
+  const history = (await commandHistoryStore.get()) ?? {};
+  const existing = history[commandKey] ?? [];
+  history[commandKey] = [keyword, ...existing.filter((k) => k !== keyword)].slice(0, MAX_COMMAND_HISTORY);
+  return commandHistoryStore.set(history);
+}
+
+async function getCommandHistory(commandKey: string): Promise<string[]> {
+  const history = (await commandHistoryStore.get()) ?? {};
+  return history[commandKey] ?? [];
 }
 
 async function handleExecuteCommand(commandKey: string, keyword: string): Promise<boolean> {

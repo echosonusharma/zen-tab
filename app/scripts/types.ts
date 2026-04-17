@@ -10,7 +10,9 @@ export type ExtensionMessage =
   | { action: "getAllTabs" }
   | { action: "orderTabsBySearchKeyword"; data: { searchKeyword: string; tabs: SearchableTab[] } }
   | { action: "fetchFavicon"; data: { iconUrl: string } }
-  | { action: "executeCommand"; data: { commandKey: string; keyword: string } };
+  | { action: "executeCommand"; data: { commandKey: string; keyword: string } }
+  | { action: "recordCommand"; data: { commandKey: string; keyword: string } }
+  | { action: "getRecentCommands"; data: { commandKey: string } };
 
 export enum StoreType {
   LOCAL = "local",

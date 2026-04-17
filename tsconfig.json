@@ -2,9 +2,10 @@
   "compilerOptions": {
     "target": "es2020",
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "strict": true,
     "esModuleInterop": true,
+    "rootDir": "./app/scripts",
     "outDir": "./app/scripts",
     "sourceMap": true,
     "declaration": false,

@@ -1,7 +1,8 @@
 import { h, Fragment } from "preact";
+import type * as preact from "preact";
 import browser from "webextension-polyfill";
 import { useEffect, useState, useRef, useMemo } from "preact/hooks";
-import { broadcastMsgToServiceWorker } from "./utils";
+import { broadcastMsgToServiceWorker, looksLikeDomain } from "./utils";
 import { SearchableTab, CommandDefinition } from "./types";
 import { SearchIcon, CommandIcon, HistoryIcon, WindowIcon } from "./icons";
 
@@ -94,6 +95,7 @@ function KeyboardHints({ mode }: { mode: "command" | "suggest" | "normal" }) {
     <div className="keyboard-hint">
       {mode === "command" && (
         <Fragment>
+          <span><kbd>↑</kbd> <kbd>↓</kbd> history</span>
           <span><kbd>↵</kbd> execute</span>
           <span><kbd>esc</kbd> close</span>
         </Fragment>
@@ -121,6 +123,7 @@ function useSearch() {
   const [tabs, setTabs] = useState<SearchableTab[]>([]);
   const [filteredTabs, setFilteredTabs] = useState<SearchableTab[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const [recentCommands, setRecentCommands] = useState<string[]>([]);
 
   const activeCommand = useMemo(() => {
     const sq = searchQuery.trim();
@@ -166,7 +169,7 @@ function useSearch() {
   useEffect(() => {
     if (isCommandMode || isSuggestingCommands) {
       setFilteredTabs([]);
-      setSelectedIndex(0);
+      setSelectedIndex(isCommandMode ? -1 : 0);
       return;
     }
 
@@ -183,13 +186,92 @@ function useSearch() {
     setSelectedIndex(0);
   }, [searchQuery, tabs, isCommandMode, isSuggestingCommands]);
 
+  useEffect(() => {
+    if (!activeCommand) {
+      setRecentCommands([]);
+      return;
+    }
+    broadcastMsgToServiceWorker({
+      action: "getRecentCommands",
+      data: { commandKey: activeCommand.command.key },
+    })
+      .then((res) => setRecentCommands((res as string[]) ?? []))
+      .catch(() => setRecentCommands([]));
+  }, [activeCommand?.command.key]);  // eslint-disable-line react-hooks/exhaustive-deps
+
   return {
     searchQuery, setSearchQuery,
     tabs, filteredTabs,
     selectedIndex, setSelectedIndex,
     activeCommand, isCommandMode,
-    isSuggestingCommands, commandSuggestions
+    isSuggestingCommands, commandSuggestions,
+    recentCommands,
   };
+}
+
+function CommandModeBody({
+  activeCommand,
+  recentCommands,
+  selectedIndex,
+  resultsRef,
+  onSelectRecent,
+}: {
+  activeCommand: { command: CommandDefinition; keyword: string };
+  recentCommands: string[];
+  selectedIndex: number;
+  resultsRef: preact.RefObject<HTMLUListElement>;
+  onSelectRecent: (keyword: string) => void;
+}) {
+  const keyword = activeCommand.keyword.trim();
+  const hasContent = keyword || recentCommands.length > 0;
+
+  if (!hasContent) {
+    return (
+      <div className="command-panel">
+        <div className="command-panel-icon"><CommandIcon /></div>
+        <div className="command-panel-info">
+          <span className="command-panel-desc">{activeCommand.command.description}</span>
+        </div>
+        <span className="command-panel-hint">Type a keyword to continue</span>
+      </div>
+    );
+  }
+
+  return (
+    <Fragment>
+      {keyword && (
+        <div className={`command-preview${selectedIndex >= 0 ? " command-preview-dimmed" : ""}`}>
+          <div className="command-panel-icon"><CommandIcon /></div>
+          <div className="command-preview-text">
+            <span className="command-preview-action">
+              {looksLikeDomain(keyword) ? "Navigate to" : "Search the web for"}
+            </span>
+            <span className="command-preview-keyword">{keyword}</span>
+          </div>
+          <kbd className="command-preview-enter">↵</kbd>
+        </div>
+      )}
+      {recentCommands.length > 0 && (
+        <Fragment>
+          <div className="tab-count">Recent</div>
+          <ul className="search-results" ref={resultsRef}>
+            {recentCommands.map((kw, index) => (
+              <li
+                key={kw}
+                onClick={() => onSelectRecent(kw)}
+                className={`tab-item${index === selectedIndex ? " selected" : ""}`}
+              >
+                <div className="command-recent-icon"><HistoryIcon /></div>
+                <div className="tab-info">
+                  <span className="tab-title">{kw}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </Fragment>
+      )}
+    </Fragment>
+  );
 }
 
 export function SearchApp({ onClose }: { onClose?: () => void }) {
@@ -198,7 +280,8 @@ export function SearchApp({ onClose }: { onClose?: () => void }) {
     filteredTabs,
     selectedIndex, setSelectedIndex,
     activeCommand, isCommandMode,
-    isSuggestingCommands, commandSuggestions
+    isSuggestingCommands, commandSuggestions,
+    recentCommands,
   } = useSearch();
 
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -207,20 +290,43 @@ export function SearchApp({ onClose }: { onClose?: () => void }) {
   useEffect(() => searchInputRef.current?.focus(), []);
 
   useEffect(() => {
-    const totalItems = isSuggestingCommands ? commandSuggestions.length : filteredTabs.length;
-    if (resultsRef.current && totalItems > 0) {
-      const selectedElement = resultsRef.current.children[selectedIndex] as HTMLElement;
-      selectedElement?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    if (!resultsRef.current) return;
+    if (isCommandMode && selectedIndex >= 0) {
+      const el = resultsRef.current.children[selectedIndex] as HTMLElement;
+      el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    } else if (!isCommandMode) {
+      const totalItems = isSuggestingCommands ? commandSuggestions.length : filteredTabs.length;
+      if (totalItems > 0) {
+        const el = resultsRef.current.children[selectedIndex] as HTMLElement;
+        el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
     }
-  }, [selectedIndex, filteredTabs.length, commandSuggestions.length, isSuggestingCommands]);
+  }, [selectedIndex, filteredTabs.length, commandSuggestions.length, isSuggestingCommands, isCommandMode]);
 
   const selectCommand = (cmd: CommandDefinition) => {
     setSearchQuery(`${COMMAND_PREFIX}${cmd.key} `);
     setSelectedIndex(0);
   };
 
+  const selectRecentQuery = (keyword: string) => {
+    setSearchQuery(`${COMMAND_PREFIX}${activeCommand!.command.key} ${keyword}`);
+  };
+
+  const executeCommand = (cmdKey: string, keyword: string) => {
+    broadcastMsgToServiceWorker({
+      action: "recordCommand",
+      data: { commandKey: cmdKey, keyword },
+    }).catch(console.error);
+    activeCommand!.command.execute(keyword);
+    if (onClose) onClose();
+  };
+
   const handleKeyDown = (e: KeyboardEvent) => {
-    const maxIndex = isSuggestingCommands ? commandSuggestions.length - 1 : filteredTabs.length - 1;
+    const maxIndex = isCommandMode
+      ? recentCommands.length - 1
+      : isSuggestingCommands
+      ? commandSuggestions.length - 1
+      : filteredTabs.length - 1;
 
     switch (e.key) {
       case "Escape":
@@ -232,14 +338,15 @@ export function SearchApp({ onClose }: { onClose?: () => void }) {
         break;
       case "ArrowUp":
         e.preventDefault();
-        setSelectedIndex((prev) => Math.max(prev - 1, 0));
+        setSelectedIndex((prev) => Math.max(prev - 1, isCommandMode ? -1 : 0));
         break;
       case "Enter":
         if (isCommandMode) {
-          const keyword = activeCommand!.keyword.trim();
-          if (keyword) {
-            activeCommand!.command.execute(keyword);
-            if (onClose) onClose();
+          if (selectedIndex >= 0 && recentCommands[selectedIndex]) {
+            executeCommand(activeCommand!.command.key, recentCommands[selectedIndex]);
+          } else {
+            const keyword = activeCommand!.keyword.trim();
+            if (keyword) executeCommand(activeCommand!.command.key, keyword);
           }
         } else if (isSuggestingCommands) {
           if (commandSuggestions.length > 0) selectCommand(commandSuggestions[selectedIndex]);
@@ -283,9 +390,13 @@ export function SearchApp({ onClose }: { onClose?: () => void }) {
 
       <div className="body">
         {isCommandMode ? (
-          <Fragment>
-            {/* during keyword entry after cmd selection we wont show any results for now */}
-          </Fragment>
+          <CommandModeBody
+            activeCommand={activeCommand!}
+            recentCommands={recentCommands}
+            selectedIndex={selectedIndex}
+            resultsRef={resultsRef}
+            onSelectRecent={selectRecentQuery}
+          />
         ) : isSuggestingCommands ? (
           <Fragment>
             <div className="tab-count">Available Commands</div>
