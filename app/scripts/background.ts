@@ -252,6 +252,9 @@ browser.commands.onCommand.addListener(async (command: string) => {
       case "open_and_close_search":
         await handleSearchCmd(activeTabId, activeWindowId);
         break;
+      case "kill_tab":
+        await browser.tabs.remove(activeTabId);
+        break;
     }
   } catch (err) {
     logger("Error handling command:", err);
