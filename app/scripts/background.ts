@@ -532,22 +532,25 @@ function orderTabsBySearchKeyword(searchKeyword: string, tabs: SearchableTab[]):
 
 const FAVICON_CACHE_KEY = "favicon_cache";
 const FAVICON_TTL = 24 * 60 * 60 * 1000;
-let faviconMemoryCache: Record<string, any> | null = null;
+type FaviconEntry = { data: string; timestamp: number };
+let faviconMemoryCache: Record<string, FaviconEntry> | null = null;
 
 async function handleFetchFavicon(iconUrl: string): Promise<string> {
   const now = Date.now();
 
   if (!faviconMemoryCache) {
     const result = await browser.storage.local.get(FAVICON_CACHE_KEY);
-    faviconMemoryCache = result[FAVICON_CACHE_KEY] || {};
+    const cache = (result[FAVICON_CACHE_KEY] ?? {}) as Record<string, FaviconEntry>;
 
     let hasStaleEntries = false;
-    for (const key of Object.keys(faviconMemoryCache)) {
-      if (now - faviconMemoryCache[key].timestamp >= FAVICON_TTL) {
-        delete faviconMemoryCache[key];
+    for (const key of Object.keys(cache)) {
+      if (now - cache[key].timestamp >= FAVICON_TTL) {
+        delete cache[key];
         hasStaleEntries = true;
       }
     }
+
+    faviconMemoryCache = cache;
 
     if (hasStaleEntries) {
       await browser.storage.local.set({ [FAVICON_CACHE_KEY]: faviconMemoryCache });
@@ -577,7 +580,7 @@ async function handleFetchFavicon(iconUrl: string): Promise<string> {
     const contentType = res.headers.get("content-type") || "image/png";
     const dataUrl = `data:${contentType};base64,${base64}`;
 
-    faviconMemoryCache![iconUrl] = { data: dataUrl, timestamp: now };
+    faviconMemoryCache[iconUrl] = { data: dataUrl, timestamp: now };
     await browser.storage.local.set({ [FAVICON_CACHE_KEY]: faviconMemoryCache });
 
     return dataUrl;

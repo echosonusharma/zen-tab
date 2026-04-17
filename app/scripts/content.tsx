@@ -7,6 +7,8 @@ import { SearchApp } from "./search-app";
 // Wrap everything in an IIFE to prevent "already declared" errors when the content script is re-injected on each shortcut press.
 (async function () {
   const CONTAINER_SELECTOR = "div[data-tabaru-container]";
+  const abortController = new AbortController();
+  const { signal } = abortController;
 
   // Lifecycle Handlers
 
@@ -43,11 +45,8 @@ import { SearchApp } from "./search-app";
   function handleClose() {
     const container = document.querySelector(CONTAINER_SELECTOR);
     if (container) {
-      document.removeEventListener("visibilitychange", visibilityListener);
       browser.runtime.onMessage.removeListener(messageListener);
-      window.removeEventListener("keydown", globalKeyCaptureListener, true);
-      window.removeEventListener("keyup", globalKeyCaptureListener, true);
-      window.removeEventListener("keypress", globalKeyCaptureListener, true);
+      abortController.abort();
       container.remove();
     }
   }
@@ -55,10 +54,10 @@ import { SearchApp } from "./search-app";
   // Entry Point
 
   browser.runtime.onMessage.addListener(messageListener);
-  document.addEventListener("visibilitychange", visibilityListener);
-  window.addEventListener("keydown", globalKeyCaptureListener, true);
-  window.addEventListener("keyup", globalKeyCaptureListener, true);
-  window.addEventListener("keypress", globalKeyCaptureListener, true);
+  document.addEventListener("visibilitychange", visibilityListener, { signal });
+  window.addEventListener("keydown", globalKeyCaptureListener, { capture: true, signal });
+  window.addEventListener("keyup", globalKeyCaptureListener, { capture: true, signal });
+  window.addEventListener("keypress", globalKeyCaptureListener, { capture: true, signal });
 
   const existingContainer = document.querySelector(CONTAINER_SELECTOR);
   if (existingContainer) {
@@ -77,9 +76,9 @@ import { SearchApp } from "./search-app";
 
   // Prevent keyboard events originating from inside the container from bubbling out to the host document
   const stopBubbling = (e: Event) => e.stopPropagation();
-  container.addEventListener("keydown", stopBubbling);
-  container.addEventListener("keyup", stopBubbling);
-  container.addEventListener("keypress", stopBubbling);
+  container.addEventListener("keydown", stopBubbling, { signal });
+  container.addEventListener("keyup", stopBubbling, { signal });
+  container.addEventListener("keypress", stopBubbling, { signal });
 
   const shadowRoot = container.attachShadow({ mode: "open" });
 
@@ -99,7 +98,7 @@ import { SearchApp } from "./search-app";
   // Add backdrop for click-outside-to-close
   const backdrop = document.createElement("div");
   backdrop.className = "tabaru-backdrop";
-  backdrop.addEventListener("click", handleClose);
+  backdrop.addEventListener("click", handleClose, { signal });
   shadowRoot.appendChild(backdrop);
 
   const contentContainer = document.createElement("div");
