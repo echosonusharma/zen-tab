@@ -115,15 +115,6 @@ export async function broadcastMsgToServiceWorker(data: ExtensionMessage): Promi
   }
 }
 
-export async function sendMessageToContentScript(tabId: number, data: ExtensionMessage): Promise<any> {
-  try {
-    return await browser.tabs.sendMessage(tabId, data);
-  } catch (err) {
-    logger("Error sending message to content script:", err);
-    return null;
-  }
-}
-
 export function getShortcutsPageUrl(): string {
   return getBrowserConfig().shortcutsPageUrl;
 }
