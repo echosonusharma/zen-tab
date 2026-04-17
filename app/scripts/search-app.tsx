@@ -1,5 +1,6 @@
 import { h, Fragment } from "preact";
 import type * as preact from "preact";
+import { memo } from "preact/compat";
 import browser from "webextension-polyfill";
 import { useEffect, useState, useRef, useMemo } from "preact/hooks";
 import { broadcastMsgToServiceWorker, looksLikeDomain } from "./utils";
@@ -28,17 +29,34 @@ const COMMAND_MAP = new Map<string, CommandDefinition>(
   COMMANDS.map((cmd) => [cmd.key, cmd])
 );
 
+const faviconCache = new Map<string, string>();
+const faviconInFlight = new Map<string, Promise<string>>();
+
 async function getFavicon(iconUrl: string | undefined): Promise<string> {
   if (!iconUrl || iconUrl.startsWith("data:")) return iconUrl || "";
-  try {
-    const result = await broadcastMsgToServiceWorker({
-      action: "fetchFavicon",
-      data: { iconUrl }
-    });
-    return result || iconUrl;
-  } catch {
-    return iconUrl;
-  }
+  const cached = faviconCache.get(iconUrl);
+  if (cached !== undefined) return cached;
+  const pending = faviconInFlight.get(iconUrl);
+  if (pending) return pending;
+
+  const promise = (async () => {
+    try {
+      const result = await broadcastMsgToServiceWorker({
+        action: "fetchFavicon",
+        data: { iconUrl }
+      });
+      const resolved = (result as string) || iconUrl;
+      faviconCache.set(iconUrl, resolved);
+      return resolved;
+    } catch {
+      faviconCache.set(iconUrl, iconUrl);
+      return iconUrl;
+    } finally {
+      faviconInFlight.delete(iconUrl);
+    }
+  })();
+  faviconInFlight.set(iconUrl, promise);
+  return promise;
 }
 
 function extractDomain(url?: string): string {
@@ -51,15 +69,24 @@ function extractDomain(url?: string): string {
   }
 }
 
-function TabComponent({ tab }: { tab: SearchableTab }) {
+const TabComponent = memo(function TabComponent({ tab }: { tab: SearchableTab }) {
   const fallbackIconUrl = browser.runtime.getURL("images/tabaru-icon.svg");
-  const [iconUrl, setIconUrl] = useState(fallbackIconUrl);
+  const cachedIcon = tab.favIconUrl ? faviconCache.get(tab.favIconUrl) : undefined;
+  const [iconUrl, setIconUrl] = useState(cachedIcon ?? fallbackIconUrl);
   const isRecentlyClosed = tab.source === "recent";
 
   useEffect(() => {
+    if (!tab.favIconUrl) return;
+    const cached = faviconCache.get(tab.favIconUrl);
+    if (cached !== undefined) {
+      setIconUrl(cached);
+      return;
+    }
+    let cancelled = false;
     getFavicon(tab.favIconUrl).then((url) => {
-      if (url) setIconUrl(url);
+      if (!cancelled && url) setIconUrl(url);
     });
+    return () => { cancelled = true; };
   }, [tab.favIconUrl]);
 
   return (
@@ -88,7 +115,7 @@ function TabComponent({ tab }: { tab: SearchableTab }) {
       )}
     </Fragment>
   );
-}
+});
 
 function KeyboardHints({ mode }: { mode: "command" | "suggest" | "normal" }) {
   return (
@@ -175,15 +202,21 @@ function useSearch() {
 
     if (searchQuery.trim() === "") {
       setFilteredTabs(tabs);
-    } else {
+      setSelectedIndex(0);
+      return;
+    }
+
+    let cancelled = false;
+    const handle = setTimeout(() => {
       broadcastMsgToServiceWorker({
         action: "orderTabsBySearchKeyword",
         data: { searchKeyword: searchQuery, tabs },
       })
-        .then((res) => setFilteredTabs(res as SearchableTab[]))
+        .then((res) => { if (!cancelled) setFilteredTabs(res as SearchableTab[]); })
         .catch((e) => console.error("Search error:", e));
-    }
+    }, 50);
     setSelectedIndex(0);
+    return () => { cancelled = true; clearTimeout(handle); };
   }, [searchQuery, tabs, isCommandMode, isSuggestingCommands]);
 
   useEffect(() => {
