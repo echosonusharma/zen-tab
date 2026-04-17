@@ -151,3 +151,14 @@ export async function openShortcutSettings(): Promise<void> {
     logger("Error navigating to shortcuts page", e);
   }
 }
+
+export function looksLikeDomain(input: string): boolean {
+  try {
+    const url = new URL(
+      input.startsWith("http") ? input : `http://${input}`
+    );
+    return url.hostname.includes(".");
+  } catch {
+    return false;
+  }
+}

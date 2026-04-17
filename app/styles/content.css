@@ -511,3 +511,75 @@
   font-style: italic !important;
   color: rgba(255, 255, 255, 0.25) !important;
 }
+
+/* ── Command Mode: slim live-preview bar ──────────────────────────────── */
+
+#tabaru-content .command-preview {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 12px 16px !important;
+  margin: 8px 12px 12px 12px !important;
+  border-radius: 10px !important;
+  background: rgba(168, 130, 255, 0.07) !important;
+  border: 1px solid rgba(168, 130, 255, 0.12) !important;
+}
+
+#tabaru-content .command-preview.command-preview-dimmed {
+  opacity: 0.45 !important;
+}
+
+#tabaru-content .command-preview-text {
+  flex: 1 !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 2px !important;
+}
+
+#tabaru-content .command-preview-action {
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+}
+
+#tabaru-content .command-preview-keyword {
+  font-size: 13px !important;
+  font-weight: 500 !important;
+  color: rgba(168, 130, 255, 0.9) !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+#tabaru-content .command-preview-enter {
+  background: rgba(168, 130, 255, 0.15) !important;
+  border: 1px solid rgba(168, 130, 255, 0.25) !important;
+  border-radius: 5px !important;
+  padding: 3px 7px !important;
+  font-size: 13px !important;
+  font-family: -apple-system, BlinkMacSystemFont, 'SF Mono', monospace !important;
+  color: rgba(168, 130, 255, 0.8) !important;
+  flex-shrink: 0 !important;
+}
+
+/* ── Command Mode: recent queries rows ───────────────────────────────── */
+
+#tabaru-content .command-recent-icon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 6px !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+  flex-shrink: 0 !important;
+}
+
+#tabaru-content .command-recent-icon svg {
+  width: 14px !important;
+  height: 14px !important;
+}
