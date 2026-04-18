@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
 import { ExtensionMessage, OpenTabInfo, SearchableTab, StoreType, TabData, TabInfo } from "./types";
-import { Store, getNewTabUrls, logger, openShortcutSettings, looksLikeDomain } from "./utils";
+import { Store, getNewTabUrls, logger, openShortcutSettings, looksLikeDomain, openSettingsPage } from "./utils";
 import initWasmModule, { init_wasm, generate_keyword_for_tab, ld } from "ld-wasm-lib";
 
 const wasmReadyPromise = initWasmModule()
@@ -28,10 +28,19 @@ let searchPopupConnections = 0;
 browser.runtime.onConnect.addListener((port) => {
   if (port.name === "popupSearchMode") {
     searchPopupConnections++;
-    port.onDisconnect.addListener(() => {
+    port.onDisconnect.addListener(async () => {
       searchPopupConnections--;
+      try {
+        await browser.action.setPopup({ popup: "" });
+      } catch (e) {
+        logger("Error clearing popup:", e);
+      }
     });
   }
+});
+
+browser.action.onClicked.addListener(async () => {
+  await openSettingsPage();
 });
 
 browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
@@ -329,9 +338,11 @@ async function handleSearchCmd(activeTabId: number, activeWindowId: number): Pro
     logger(`Error in handleSearchCmd, falling back to popup:`, error);
     try {
       await searchFallbackStore.set(Date.now());
+      await browser.action.setPopup({ popup: "popup.html" });
       await browser.action.openPopup({ windowId: activeWindowId });
     } catch (fallbackError) {
       logger(`Failed to open fallback popup:`, fallbackError);
+      await browser.action.setPopup({ popup: "" });
     }
   }
 }

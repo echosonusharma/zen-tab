@@ -119,6 +119,16 @@ export function getShortcutsPageUrl(): string {
   return getBrowserConfig().shortcutsPageUrl;
 }
 
+export async function openSettingsPage(): Promise<void> {
+  const url = browser.runtime.getURL("settings.html");
+  try {
+    await browser.tabs.create({ url });
+  } catch (e) {
+    logger("Error opening settings page", e);
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+}
+
 export async function openShortcutSettings(): Promise<void> {
   const url = getShortcutsPageUrl();
 
