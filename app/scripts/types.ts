@@ -12,7 +12,9 @@ export type ExtensionMessage =
   | { action: "fetchFavicon"; data: { iconUrl: string } }
   | { action: "executeCommand"; data: { commandKey: string; keyword: string } }
   | { action: "recordCommand"; data: { commandKey: string; keyword: string } }
-  | { action: "getRecentCommands"; data: { commandKey: string } };
+  | { action: "getRecentCommands"; data: { commandKey: string } }
+  | { action: "searchBookmarks"; data: { searchKeyword: string } }
+  | { action: "openBookmark"; data: { url: string } };
 
 export enum StoreType {
   LOCAL = "local",
@@ -47,6 +49,20 @@ export interface OpenTabInfo extends TabInfo {
 }
 
 export type SearchableTab = OpenTabInfo | RecentlyClosedTabInfo;
+
+export interface BookmarkItem {
+  id: string;
+  title: string;
+  url: string;
+  favIconUrl?: string;
+  keywords?: string[];
+  ld?: number;
+  fts?: number;
+  matchIndex?: number;
+  parentId?: string;
+  parentTitle?: string;
+  dateAdded?: number;
+}
 
 export interface CommandDefinition {
   /** Single-character trigger, e.g. "s" */

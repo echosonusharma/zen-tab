@@ -1,5 +1,5 @@
 import browser from "webextension-polyfill";
-import { ExtensionMessage, OpenTabInfo, SearchableTab, StoreType, TabData, TabInfo } from "./types";
+import { BookmarkItem, ExtensionMessage, OpenTabInfo, SearchableTab, StoreType, TabData, TabInfo } from "./types";
 import { Store, getNewTabUrls, logger, openShortcutSettings, looksLikeDomain, openSettingsPage } from "./utils";
 import initWasmModule, { init_wasm, generate_keyword_for_tab, ld } from "ld-wasm-lib";
 
@@ -20,6 +20,7 @@ const activeWindowIdStore: Store<number> = new Store("activeWindowId", StoreType
 const searchTabStore: Store<boolean> = new Store("searchTab", StoreType.LOCAL);
 const searchFallbackStore: Store<number> = new Store("searchFallback", StoreType.SESSION);
 const commandHistoryStore: Store<Record<string, string[]>> = new Store("commandHistory", StoreType.LOCAL);
+const bookmarksStore: Store<BookmarkItem[]> = new Store("bookmarks", StoreType.LOCAL);
 
 // Runtime Events
 
@@ -43,11 +44,15 @@ browser.action.onClicked.addListener(async () => {
   await openSettingsPage();
 });
 
-browser.runtime.onStartup.addListener(async () => await initWindowAndTabData());
+browser.runtime.onStartup.addListener(async () => {
+  await initWindowAndTabData();
+  await rebuildBookmarksIndex();
+});
 
 browser.runtime.onInstalled.addListener(async (details) => {
   await initWindowAndTabData();
   await searchTabStore.set(true);
+  await rebuildBookmarksIndex();
 
   if (details.reason === "install") {
     checkAndPromptShortcuts();
@@ -106,6 +111,13 @@ browser.runtime.onMessage.addListener(
 
       case "getRecentCommands":
         return await getCommandHistory(msg.data.commandKey);
+
+      case "searchBookmarks":
+        await wasmReadyPromise;
+        return await searchBookmarks(msg.data.searchKeyword);
+
+      case "openBookmark":
+        return await handleOpenBookmark(msg.data.url);
 
       default:
         return undefined;
@@ -496,31 +508,40 @@ async function restoreRecentlyClosedSession(sessionId: string): Promise<boolean>
   }
 }
 
-function orderTabsBySearchKeyword(searchKeyword: string, tabs: SearchableTab[]): SearchableTab[] {
+interface RankableItem {
+  title?: string;
+  url?: string;
+  keywords?: string[];
+  fts?: number;
+  ld?: number;
+  matchIndex?: number;
+}
+
+function orderItemsBySearchKeyword<T extends RankableItem>(searchKeyword: string, items: T[]): T[] {
   const sk = searchKeyword.toLowerCase();
 
-  if (!sk) return tabs;
+  if (!sk) return items;
 
-  for (const tab of tabs) {
-    const fullText = ((tab.title || "") + " " + (tab.url || "")).toLowerCase();
+  for (const item of items) {
+    const fullText = ((item.title || "") + " " + (item.url || "")).toLowerCase();
     const matchIndex = fullText.indexOf(sk);
 
     // 1. Check Full Substring Match First (FTS) against the whole title+url
     if (matchIndex !== -1) {
-      tab.fts = 1;
-      tab.ld = 0; // Skip WASM entirely! Zero distance is perfect.
-      tab.matchIndex = matchIndex;
+      item.fts = 1;
+      item.ld = 0; // Skip WASM entirely! Zero distance is perfect.
+      item.matchIndex = matchIndex;
       continue;
     }
 
     // 2. Fallback to Levenshtein against keywords
-    const keywords = tab.keywords ?? [];
-    tab.fts = 0;
-    tab.ld = keywords.length > 0 ? Math.min(...keywords.map((w) => ld(sk, w.toLowerCase()))) : Infinity;
-    tab.matchIndex = Infinity;
+    const keywords = item.keywords ?? [];
+    item.fts = 0;
+    item.ld = keywords.length > 0 ? Math.min(...keywords.map((w) => ld(sk, w.toLowerCase()))) : Infinity;
+    item.matchIndex = Infinity;
   }
 
-  tabs.sort((a, b) => {
+  items.sort((a, b) => {
     const ftsA = a.fts ?? 0;
     const ftsB = b.fts ?? 0;
 
@@ -538,7 +559,11 @@ function orderTabsBySearchKeyword(searchKeyword: string, tabs: SearchableTab[]):
     return (a.ld ?? Infinity) - (b.ld ?? Infinity);
   });
 
-  return tabs;
+  return items;
+}
+
+function orderTabsBySearchKeyword(searchKeyword: string, tabs: SearchableTab[]): SearchableTab[] {
+  return orderItemsBySearchKeyword(searchKeyword, tabs);
 }
 
 const FAVICON_CACHE_KEY = "favicon_cache";
@@ -639,6 +664,228 @@ async function handleExecuteCommand(commandKey: string, keyword: string): Promis
     }
   } catch (error) {
     logger(`Error executing command '${commandKey}':`, error);
+    return false;
+  }
+}
+
+// Bookmarks
+
+const BOOKMARK_RESULT_LIMIT = 50;
+
+function deriveFaviconUrlForBookmark(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.hostname) return undefined;
+    // Chrome's built-in favicon store — local, no network, matches what
+    // Chrome itself uses for bookmark UI. Unresolvable in Firefox; the UI
+    // falls back to the default icon via the image-load error handler.
+    return `${browser.runtime.getURL("/_favicon/")}?pageUrl=${encodeURIComponent(url)}&size=32`;
+  } catch {
+    return undefined;
+  }
+}
+
+const folderTitleCache = new Map<string, string>();
+
+async function getFolderTitle(parentId: string | undefined): Promise<string | undefined> {
+  if (!parentId) return undefined;
+  const cached = folderTitleCache.get(parentId);
+  if (cached !== undefined) return cached;
+  try {
+    const nodes = await browser.bookmarks.get(parentId);
+    const title = nodes[0]?.title || "";
+    folderTitleCache.set(parentId, title);
+    return title;
+  } catch {
+    return undefined;
+  }
+}
+
+async function populateFolderTitleCacheFromTree(): Promise<void> {
+  try {
+    const tree = await browser.bookmarks.getTree();
+    const walk = (nodes: browser.Bookmarks.BookmarkTreeNode[]): void => {
+      for (const node of nodes) {
+        if (!node.url && node.id) {
+          folderTitleCache.set(node.id, node.title || "");
+        }
+        if (node.children) walk(node.children);
+      }
+    };
+    walk(tree);
+  } catch {
+    // If getTree fails we fall back to missing titles.
+  }
+}
+
+async function rebuildBookmarksIndex(): Promise<void> {
+  try {
+    await wasmReadyPromise;
+    const tree = await browser.bookmarks.getTree();
+    const items: BookmarkItem[] = [];
+    folderTitleCache.clear();
+
+    const walk = (nodes: browser.Bookmarks.BookmarkTreeNode[], parentTitle?: string): void => {
+      for (const node of nodes) {
+        if (node.url) {
+          items.push({
+            id: node.id,
+            title: node.title || "",
+            url: node.url,
+            favIconUrl: deriveFaviconUrlForBookmark(node.url),
+            keywords: generate_keyword_for_tab(node.title || "", node.url),
+            parentId: node.parentId,
+            parentTitle,
+            dateAdded: node.dateAdded,
+          });
+        } else if (node.id) {
+          folderTitleCache.set(node.id, node.title || "");
+        }
+        if (node.children) walk(node.children, node.url ? parentTitle : (node.title || parentTitle));
+      }
+    };
+
+    walk(tree);
+    await bookmarksStore.set(items);
+  } catch (error) {
+    logger("Failed to rebuild bookmarks index:", error);
+  }
+}
+
+browser.bookmarks.onCreated.addListener(async (id, bookmark) => {
+  try {
+    if (!bookmark.url) {
+      if (id && bookmark.title) folderTitleCache.set(id, bookmark.title);
+      return;
+    }
+    await wasmReadyPromise;
+    const items = (await bookmarksStore.get()) ?? [];
+    items.push({
+      id,
+      title: bookmark.title || "",
+      url: bookmark.url,
+      favIconUrl: deriveFaviconUrlForBookmark(bookmark.url),
+      keywords: generate_keyword_for_tab(bookmark.title || "", bookmark.url),
+      parentId: bookmark.parentId,
+      parentTitle: await getFolderTitle(bookmark.parentId),
+      dateAdded: bookmark.dateAdded,
+    });
+    await bookmarksStore.set(items);
+  } catch (error) {
+    logger("Error in bookmarks.onCreated:", error);
+  }
+});
+
+browser.bookmarks.onRemoved.addListener(async (_id, removeInfo) => {
+  try {
+    const items = (await bookmarksStore.get()) ?? [];
+    const removedIds = new Set<string>();
+
+    const collectIds = (node: browser.Bookmarks.BookmarkTreeNode): void => {
+      removedIds.add(node.id);
+      if (!node.url) folderTitleCache.delete(node.id);
+      if (node.children) node.children.forEach(collectIds);
+    };
+
+    collectIds(removeInfo.node);
+    await bookmarksStore.set(items.filter((it) => !removedIds.has(it.id)));
+  } catch (error) {
+    logger("Error in bookmarks.onRemoved:", error);
+  }
+});
+
+browser.bookmarks.onChanged.addListener(async (id, changeInfo) => {
+  try {
+    await wasmReadyPromise;
+    const items = (await bookmarksStore.get()) ?? [];
+    const item = items.find((it) => it.id === id);
+
+    if (!item) {
+      if (changeInfo.title !== undefined) {
+        folderTitleCache.set(id, changeInfo.title);
+        let touched = false;
+        for (const it of items) {
+          if (it.parentId === id) {
+            it.parentTitle = changeInfo.title;
+            touched = true;
+          }
+        }
+        if (touched) await bookmarksStore.set(items);
+      }
+      return;
+    }
+
+    if (changeInfo.title !== undefined) item.title = changeInfo.title;
+    if (changeInfo.url !== undefined) {
+      item.url = changeInfo.url;
+      item.favIconUrl = deriveFaviconUrlForBookmark(changeInfo.url);
+    }
+    item.keywords = generate_keyword_for_tab(item.title, item.url);
+
+    await bookmarksStore.set(items);
+  } catch (error) {
+    logger("Error in bookmarks.onChanged:", error);
+  }
+});
+
+browser.bookmarks.onMoved.addListener(async (id, moveInfo) => {
+  try {
+    const items = (await bookmarksStore.get()) ?? [];
+    const item = items.find((it) => it.id === id);
+    if (!item) return;
+    item.parentId = moveInfo.parentId;
+    item.parentTitle = await getFolderTitle(moveInfo.parentId);
+    await bookmarksStore.set(items);
+  } catch (error) {
+    logger("Error in bookmarks.onMoved:", error);
+  }
+});
+
+async function searchBookmarks(searchKeyword: string): Promise<BookmarkItem[]> {
+  const items = (await bookmarksStore.get()) ?? [];
+
+  let backfilled = false;
+  let hasMissingParent = false;
+  for (const item of items) {
+    if (!item.favIconUrl && item.url) {
+      item.favIconUrl = deriveFaviconUrlForBookmark(item.url);
+      backfilled = true;
+    }
+    if (item.parentTitle === undefined && item.parentId) {
+      hasMissingParent = true;
+    }
+  }
+  if (hasMissingParent) {
+    await populateFolderTitleCacheFromTree();
+    for (const item of items) {
+      if (item.parentTitle === undefined && item.parentId) {
+        const t = folderTitleCache.get(item.parentId);
+        if (t !== undefined) {
+          item.parentTitle = t;
+          backfilled = true;
+        }
+      }
+    }
+  }
+  if (backfilled) await bookmarksStore.set(items);
+
+  const keyword = searchKeyword.trim();
+
+  if (!keyword) {
+    return [...items]
+      .sort((a, b) => (b.dateAdded ?? 0) - (a.dateAdded ?? 0))
+      .slice(0, BOOKMARK_RESULT_LIMIT);
+  }
+
+  return orderItemsBySearchKeyword(keyword, items).slice(0, BOOKMARK_RESULT_LIMIT);
+}
+
+async function handleOpenBookmark(url: string): Promise<boolean> {
+  try {
+    await browser.tabs.create({ url });
+    return true;
+  } catch (error) {
+    logger("Failed to open bookmark:", error);
     return false;
   }
 }

@@ -545,3 +545,82 @@
   width: 14px !important;
   height: 14px !important;
 }
+
+/* ── Bookmark Folder Grouping ─────────────────────────────────────────── */
+
+#tabaru-content .bookmark-folder-header {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  padding: 10px 12px 4px 12px !important;
+  margin: 6px 0 2px 0 !important;
+  list-style: none !important;
+  pointer-events: none !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.4px !important;
+  text-transform: uppercase !important;
+  color: hsla(var(--folder-hue), 70%, 78%, 0.9) !important;
+  animation: tab-in 0.2s ease-out backwards !important;
+}
+
+#tabaru-content .bookmark-folder-header:first-child {
+  margin-top: 0 !important;
+}
+
+#tabaru-content .bookmark-folder-dot {
+  width: 6px !important;
+  height: 6px !important;
+  border-radius: 50% !important;
+  background: hsla(var(--folder-hue), 75%, 65%, 0.95) !important;
+  box-shadow: 0 0 6px hsla(var(--folder-hue), 75%, 65%, 0.5) !important;
+  flex-shrink: 0 !important;
+}
+
+#tabaru-content .bookmark-folder-name {
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+}
+
+#tabaru-content .bookmark-folder-count {
+  margin-left: auto !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.3px !important;
+  color: hsla(var(--folder-hue), 60%, 70%, 0.55) !important;
+  background: hsla(var(--folder-hue), 60%, 60%, 0.08) !important;
+  border: 1px solid hsla(var(--folder-hue), 60%, 60%, 0.14) !important;
+  padding: 1px 6px !important;
+  border-radius: 10px !important;
+}
+
+#tabaru-content .bookmark-item {
+  position: relative !important;
+  margin-left: 14px !important;
+  padding-left: 14px !important;
+}
+
+#tabaru-content .bookmark-item::before {
+  content: "" !important;
+  position: absolute !important;
+  left: 4px !important;
+  top: 8px !important;
+  bottom: 8px !important;
+  width: 2px !important;
+  border-radius: 2px !important;
+  background: hsla(var(--folder-hue), 70%, 60%, 0.35) !important;
+}
+
+#tabaru-content .bookmark-item.selected {
+  background: hsla(var(--folder-hue), 70%, 60%, 0.14) !important;
+}
+
+#tabaru-content .bookmark-item.selected::before {
+  background: hsla(var(--folder-hue), 80%, 65%, 0.9) !important;
+  box-shadow: 0 0 8px hsla(var(--folder-hue), 80%, 65%, 0.5) !important;
+}
+
+#tabaru-content .bookmark-item:hover {
+  background: hsla(var(--folder-hue), 70%, 60%, 0.08) !important;
+}

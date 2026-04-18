@@ -14,7 +14,9 @@
     "activeTab",
     "scripting",
     "idle",
-    "search"
+    "search",
+    "bookmarks",
+    "favicon"
   ],
   "__firefox__permissions": [
     "storage",
@@ -23,7 +25,8 @@
     "activeTab",
     "scripting",
     "idle",
-    "search"
+    "search",
+    "bookmarks"
   ],
   "host_permissions": [
     "<all_urls>"
