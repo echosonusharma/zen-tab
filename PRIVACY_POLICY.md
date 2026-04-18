@@ -2,31 +2,71 @@
 
 ## Overview
 
-Tabaru is an open-source, offline-first browser extension designed for fast tab management. The author is an independent developer and is not affiliated with any company.
+Tabaru is an open-source, offline-first browser extension for tab management.
 
-Because privacy and performance are top priorities, **Tabaru does not collect, transmit, share, or sell any of your personal data.** 
+Tabaru does not operate a remote backend, does not include analytics or advertising SDKs, and does not intentionally collect, sell, or share personal data with third parties. Data used by the extension is processed locally in your browser to provide the extension's features.
 
-There are **no remote backend servers**, **no analytics**, and **no tracking**. Everything happens strictly locally on your own machine.
+## Data Handling
+
+To work correctly, Tabaru may access information that already exists in your browser, such as:
+
+- open tabs, including tab titles and URLs
+- tab groups where supported by the browser
+- recently closed sessions and windows
+- bookmarks
+- your default search engine integration through the browser's search API
+- locally stored extension settings and cached UI data
+
+This information is used only to provide the extension's functionality inside your browser. Tabaru is designed so that this data stays local to your device unless your browser itself syncs extension storage as part of the browser account features you enable.
 
 ## Permissions Explained
 
-To function effectively, Tabaru requires a few specific permissions when you install it. We only request what is absolutely necessary:
+Tabaru requests the following permissions in `app/manifest.json`:
 
-- **`tabs` & `activeTab`**: Required to fetch the titles, URLs, and favicons of your open tabs. This allows the extension to index and display your open tabs in the search menu.
-- **`storage`**: Used to save your settings locally within your browser (e.g., caching favicons to save memory, or remembering your UI settings). This data never leaves your device.
-- **`scripting`**: Required to temporarily inject the fuzzy-search UI (the search bar modal) into the pages you visit when you press the requested shortcut keys.
-- **`idle`**: Used to safely synchronize the internal background list of your open tabs when your device or browser falls asleep and wakes back up.
-- **`host_permissions` (`<all_urls>`)**: This is necessary to allow the extension to inject the search UI on any web page you are currently viewing and to retrieve website favicons to display next to the tab entries.
+- **`storage`**: Used to save extension settings and other local extension state.
+- **`tabs`**: Used to read and manage open tabs, including tab titles, URLs, and tab state needed for search and navigation features.
+- **`tabGroups`**: Used in Chromium-based browsers to read and manage tab groups.
+- **`sessions`**: Used to access recently closed tabs or windows and related session state.
+- **`activeTab`**: Used to interact with the tab you are currently viewing when a feature is triggered by you.
+- **`scripting`**: Used to inject extension-controlled UI or scripts into pages when needed for extension features.
+- **`idle`**: Used to detect browser or device idle state so Tabaru can keep internal state in sync safely.
+- **`search`**: Used to interact with the browser's search capability.
+- **`bookmarks`**: Used to read or surface bookmark data as part of navigation and search features.
+- **`favicon`**: Used in Chromium-based browsers to access favicon resources for display in the UI.
+- **`host_permissions` (`<all_urls>`)**: Required so the extension can run on pages where its features are invoked and access page context across sites.
 
-## Third-Party Services and Remote Calls
+## Browser-Specific Notes
 
-**Tabaru makes no background network calls to any external servers.** 
-The only network activity naturally initiated by the extension is directly fetching the official favicons (icons) of the websites you already have open, so they can be shown accurately in the search interface.
+- On Chromium-based browsers, Tabaru declares `tabGroups` and `favicon` in addition to the shared permissions.
+- On Firefox, those Chromium-only permissions are not declared.
 
-## Provided "As Is"
+Permission names reflect browser APIs and may sound broad, but they are requested to support the extension's tab management, search, bookmarks, session, and page-integration features.
 
-This extension is provided entirely free of charge as an open-source project. The software is provided "as is", without warranty of any kind, express or implied. I am not responsible for any data loss or browser issues. Please review the `LICENSE` file in the repository for more details.
+## Network Activity
 
-## Contact & Code Source
+Tabaru is intended to work without a remote service operated by the developer.
 
-Since this is an open-source project, you can verify this policy by inspecting the source code yourself. The best way to report issues, ask questions, or audit the code is through the project's GitHub repository.
+The extension may access website resources that are already part of normal browser usage, such as page URLs and favicon-related resources, in order to present tab information in the UI. Aside from browser-mediated access required for extension features, Tabaru is not intended to send your browsing data to a developer-controlled server.
+
+## Third-Party Sharing
+
+Tabaru does not intentionally sell or share your personal information with third parties.
+
+If your browser provides its own sync, search, bookmark, or session services, any data handling by those browser vendors is governed by their own privacy policies, not by Tabaru.
+
+## Your Choices
+
+You can control Tabaru's access by:
+
+- uninstalling the extension
+- disabling the extension in your browser
+- clearing extension storage through your browser
+- reviewing the source code before use
+
+## Open Source
+
+Tabaru is open source. You can review the code to verify how permissions are used and what data is processed locally.
+
+## Contact
+
+For questions, issues, or audit requests, please use the project's repository or the contact method provided by the developer.

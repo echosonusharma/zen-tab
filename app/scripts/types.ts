@@ -1,5 +1,20 @@
 import type { Tabs } from "webextension-polyfill";
 
+export type TabGroupColor = 'grey' | 'blue' | 'red' | 'yellow' | 'green' | 'pink' | 'purple' | 'cyan' | 'orange';
+
+export interface TabGroupRule {
+  id: string;
+  pattern: string;
+  title?: string;
+  color?: TabGroupColor;
+  collapsed?: boolean;
+  enabled?: boolean;
+  createdAt?: number;
+  updatedAt?: number;
+}
+
+export type ManagedTabGroupMap = Record<string, Record<string, number>>;
+
 export type TabData = Record<number, number[]>;
 
 export type ExtensionMessage =
@@ -14,7 +29,8 @@ export type ExtensionMessage =
   | { action: "recordCommand"; data: { commandKey: string; keyword: string } }
   | { action: "getRecentCommands"; data: { commandKey: string } }
   | { action: "searchBookmarks"; data: { searchKeyword: string } }
-  | { action: "openBookmark"; data: { url: string } };
+  | { action: "openBookmark"; data: { url: string } }
+  | { action: "groupTabsByRule"; data: { ruleId: string } };
 
 export enum StoreType {
   LOCAL = "local",
