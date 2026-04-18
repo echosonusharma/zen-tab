@@ -10,6 +10,7 @@
   "__chrome|edge|opera__permissions": [
     "storage",
     "tabs",
+    "tabGroups",
     "sessions",
     "activeTab",
     "scripting",

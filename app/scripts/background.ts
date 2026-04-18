@@ -1,6 +1,6 @@
 import browser from "webextension-polyfill";
-import { BookmarkItem, ExtensionMessage, OpenTabInfo, SearchableTab, StoreType, TabData, TabInfo } from "./types";
-import { Store, getNewTabUrls, logger, openShortcutSettings, looksLikeDomain, openSettingsPage } from "./utils";
+import { BookmarkItem, ExtensionMessage, ManagedTabGroupMap, OpenTabInfo, SearchableTab, StoreType, TabData, TabGroupRule, TabInfo } from "./types";
+import { Store, extractDomainFromPattern, getNewTabUrls, logger, looksLikeDomain, matchesUrlPattern, normalizeTabGroupRules, openSettingsPage, openShortcutSettings, randomTabGroupColor } from "./utils";
 import initWasmModule, { init_wasm, generate_keyword_for_tab, ld } from "ld-wasm-lib";
 
 const wasmReadyPromise = initWasmModule()
@@ -15,12 +15,338 @@ type TabCommand = "next_tab" | "prev_tab";
 type WindowCommand = "next_win" | "prev_win";
 
 const tabsStore: Store<TabData> = new Store("tabs", StoreType.SESSION);
+const tabGroupRulesStore: Store<TabGroupRule[]> = new Store("tabGroupRules", StoreType.LOCAL);
+const managedTabGroupsStore: Store<ManagedTabGroupMap> = new Store("managedTabGroups", StoreType.SESSION);
 const activeTabIdStore: Store<number> = new Store("activeTabId", StoreType.SESSION);
 const activeWindowIdStore: Store<number> = new Store("activeWindowId", StoreType.SESSION);
 const searchTabStore: Store<boolean> = new Store("searchTab", StoreType.LOCAL);
 const searchFallbackStore: Store<number> = new Store("searchFallback", StoreType.SESSION);
 const commandHistoryStore: Store<Record<string, string[]>> = new Store("commandHistory", StoreType.LOCAL);
 const bookmarksStore: Store<BookmarkItem[]> = new Store("bookmarks", StoreType.LOCAL);
+
+// Tab groups are Chrome-only and not exposed consistently through webextension-polyfill.
+const chromeApi = (globalThis as any).chrome;
+
+function checkChromeTabGroupsSupport(): boolean {
+  return (
+    typeof chromeApi?.tabs?.group === "function" &&
+    typeof chromeApi?.tabs?.ungroup === "function" &&
+    typeof chromeApi?.tabGroups?.get === "function" &&
+    typeof chromeApi?.tabGroups?.update === "function"
+  );
+}
+
+async function chromeGroupTab(tabId: number, groupId?: number): Promise<number | null> {
+  try {
+    if (!checkChromeTabGroupsSupport()) return null;
+    return await chromeApi.tabs.group({ tabIds: tabId, ...(groupId !== undefined ? { groupId } : {}) });
+  } catch (e) {
+    logger('chromeGroupTab error:', e);
+    return null;
+  }
+}
+
+async function chromeGroupTabs(tabIds: number[], windowId: number, groupId?: number): Promise<number | null> {
+  try {
+    if (!checkChromeTabGroupsSupport() || tabIds.length === 0) return null;
+    return await chromeApi.tabs.group({
+      tabIds,
+      ...(groupId !== undefined ? { groupId } : { createProperties: { windowId } }),
+    });
+  } catch {
+    return null;
+  }
+}
+
+async function chromeGetTabGroup(groupId: number): Promise<any | null> {
+  try {
+    if (!checkChromeTabGroupsSupport()) return null;
+    return await chromeApi.tabGroups.get(groupId);
+  } catch {
+    return null;
+  }
+}
+
+async function chromeUpdateTabGroup(groupId: number, props: { title?: string; color?: string; collapsed?: boolean }): Promise<void> {
+  try {
+    if (!checkChromeTabGroupsSupport()) return;
+    await chromeApi.tabGroups.update(groupId, props);
+  } catch (e) {
+    logger('chromeUpdateTabGroup error:', e);
+  }
+}
+
+async function chromeUngroupTabs(tabIds: number[]): Promise<void> {
+  try {
+    if (!checkChromeTabGroupsSupport() || tabIds.length === 0) return;
+    await chromeApi.tabs.ungroup(tabIds);
+  } catch (e) {
+    logger("chromeUngroupTabs error:", e);
+  }
+}
+
+function getResolvedGroupTitle(rule: TabGroupRule): string {
+  return rule.title || extractDomainFromPattern(rule.pattern);
+}
+
+function getResolvedGroupColor(rule: TabGroupRule, existingColor?: string): string {
+  return rule.color || existingColor || randomTabGroupColor();
+}
+
+function getManagedGroupKey(ruleId: string, pinned: boolean): string {
+  return `${ruleId}:${pinned ? "pinned" : "regular"}`;
+}
+
+function getManagedRuleIdFromKey(groupKey: string): string {
+  const separatorIndex = groupKey.lastIndexOf(":");
+  return separatorIndex === -1 ? groupKey : groupKey.slice(0, separatorIndex);
+}
+
+function getManagedGroupId(managedGroups: ManagedTabGroupMap, windowId: number, groupKey: string): number | undefined {
+  return managedGroups[String(windowId)]?.[groupKey];
+}
+
+function findManagedGroupKeyByGroupId(managedGroups: ManagedTabGroupMap, windowId: number, groupId?: number): string | undefined {
+  if (groupId === undefined || groupId < 0) {
+    return undefined;
+  }
+
+  const windowGroups = managedGroups[String(windowId)] || {};
+  return Object.keys(windowGroups).find((groupKey) => windowGroups[groupKey] === groupId);
+}
+
+async function ensureManagedGroupForRule(
+  managedGroups: ManagedTabGroupMap,
+  rule: TabGroupRule,
+  windowId: number,
+  pinned: boolean,
+  tabIds: number[]
+): Promise<number | null> {
+  const groupKey = getManagedGroupKey(rule.id, pinned);
+  const existingGroupId = getManagedGroupId(managedGroups, windowId, groupKey);
+  const existingGroup = existingGroupId !== undefined ? await chromeGetTabGroup(existingGroupId) : null;
+
+  const groupId =
+    existingGroup?.windowId === windowId
+      ? await chromeGroupTabs(tabIds, windowId, existingGroup.id)
+      : await chromeGroupTabs(tabIds, windowId);
+
+  if (groupId === null) {
+    return null;
+  }
+
+  await chromeUpdateTabGroup(groupId, {
+    title: getResolvedGroupTitle(rule),
+    color: getResolvedGroupColor(rule, existingGroup?.color),
+    collapsed: !!rule.collapsed,
+  });
+
+  const windowKey = String(windowId);
+  managedGroups[windowKey] = {
+    ...(managedGroups[windowKey] || {}),
+    [groupKey]: groupId,
+  };
+  await managedTabGroupsStore.set(managedGroups);
+
+  return groupId;
+}
+
+async function applyTabGroupRules(tab: browser.Tabs.Tab): Promise<void> {
+  if (!tab.id || !tab.url || !tab.windowId) return;
+
+  try {
+    const rules = normalizeTabGroupRules(await tabGroupRulesStore.get()).filter((rule) => rule.enabled !== false);
+    const managedGroups = (await managedTabGroupsStore.get()) || {};
+    const matchingRule = rules.find((rule) => matchesUrlPattern(tab.url!, rule.pattern));
+    const currentManagedGroupKey = findManagedGroupKeyByGroupId(managedGroups, tab.windowId, tab.groupId);
+
+    if (!matchingRule) {
+      if (currentManagedGroupKey) {
+        await chromeUngroupTabs([tab.id]);
+      }
+      return;
+    }
+
+    const targetGroupKey = getManagedGroupKey(matchingRule.id, !!tab.pinned);
+    if (currentManagedGroupKey && currentManagedGroupKey !== targetGroupKey) {
+      await chromeUngroupTabs([tab.id]);
+    }
+
+    const targetGroupId = await ensureManagedGroupForRule(managedGroups, matchingRule, tab.windowId, !!tab.pinned, [tab.id]);
+    if (targetGroupId === null) {
+      return;
+    }
+
+    if (tab.groupId !== targetGroupId) {
+      await chromeGroupTab(tab.id, targetGroupId);
+    }
+  } catch (error) {
+    logger("Error applying tab group rules:", error);
+  }
+}
+
+async function applyTabGroupRulesToAllTabs(): Promise<void> {
+  try {
+    const [allTabs, existingManagedGroups, rawRules] = await Promise.all([
+      browser.tabs.query({}),
+      managedTabGroupsStore.get(),
+      tabGroupRulesStore.get(),
+    ]);
+
+    const managedGroups = existingManagedGroups || {};
+    const managedGroupIds = new Set<number>();
+    for (const windowGroups of Object.values(managedGroups)) {
+      for (const groupId of Object.values(windowGroups)) {
+        managedGroupIds.add(groupId);
+      }
+    }
+
+    const tabsToUngroup = allTabs
+      .filter((tab) => typeof tab.id === "number" && typeof tab.groupId === "number" && managedGroupIds.has(tab.groupId))
+      .map((tab) => tab.id as number);
+
+    if (tabsToUngroup.length > 0) {
+      await chromeUngroupTabs(tabsToUngroup);
+    }
+
+    const rules = normalizeTabGroupRules(rawRules).filter((rule) => rule.enabled !== false);
+    const nextManagedGroups: ManagedTabGroupMap = {};
+    const groupedTabs = new Map<string, number[]>();
+
+    for (const tab of allTabs) {
+      if (!tab.id || !tab.url || !tab.windowId) {
+        continue;
+      }
+
+      const matchingRule = rules.find((rule) => matchesUrlPattern(tab.url!, rule.pattern));
+      if (!matchingRule) {
+        continue;
+      }
+
+      const key = `${tab.windowId}:${getManagedGroupKey(matchingRule.id, !!tab.pinned)}`;
+      const tabIds = groupedTabs.get(key) || [];
+      tabIds.push(tab.id);
+      groupedTabs.set(key, tabIds);
+    }
+
+    for (const [key, tabIds] of groupedTabs.entries()) {
+      const separatorIndex = key.indexOf(":");
+      const windowId = Number(key.slice(0, separatorIndex));
+      const groupKey = key.slice(separatorIndex + 1);
+      const ruleId = getManagedRuleIdFromKey(groupKey);
+      const rule = rules.find((item) => item.id === ruleId);
+
+      if (!rule) {
+        continue;
+      }
+
+      const groupId = await chromeGroupTabs(tabIds, windowId);
+      if (groupId === null) {
+        continue;
+      }
+
+      await chromeUpdateTabGroup(groupId, {
+        title: getResolvedGroupTitle(rule),
+        color: rule.color || randomTabGroupColor(),
+        collapsed: !!rule.collapsed,
+      });
+
+      const windowKey = String(windowId);
+      nextManagedGroups[windowKey] = {
+        ...(nextManagedGroups[windowKey] || {}),
+        [groupKey]: groupId,
+      };
+    }
+
+    await managedTabGroupsStore.set(nextManagedGroups);
+  } catch (error) {
+    logger("Error applying tab group rules to all tabs:", error);
+  }
+}
+
+async function groupTabsForRuleNow(ruleId: string): Promise<boolean> {
+  try {
+    const [allTabs, rawRules, existingManagedGroups] = await Promise.all([
+      browser.tabs.query({}),
+      tabGroupRulesStore.get(),
+      managedTabGroupsStore.get(),
+    ]);
+
+    const rules = normalizeTabGroupRules(rawRules);
+    const rule = rules.find((item) => item.id === ruleId && item.enabled !== false);
+    if (!rule) {
+      return false;
+    }
+
+    const managedGroups = existingManagedGroups || {};
+    const matchingTabs = allTabs.filter(
+      (tab) =>
+        typeof tab.id === "number" &&
+        typeof tab.windowId === "number" &&
+        typeof tab.url === "string" &&
+        matchesUrlPattern(tab.url, rule.pattern)
+    );
+    if (matchingTabs.length === 0) {
+      return true;
+    }
+
+    const managedGroupIds = new Set<number>();
+    for (const windowGroups of Object.values(managedGroups)) {
+      for (const groupId of Object.values(windowGroups)) {
+        managedGroupIds.add(groupId);
+      }
+    }
+
+    const tabsToUngroup = matchingTabs
+      .filter((tab) => typeof tab.id === "number" && typeof tab.groupId === "number" && managedGroupIds.has(tab.groupId))
+      .map((tab) => tab.id as number);
+
+    if (tabsToUngroup.length > 0) {
+      await chromeUngroupTabs(tabsToUngroup);
+    }
+
+    const tabsByWindow = new Map<string, { windowId: number; pinned: boolean; tabIds: number[] }>();
+    for (const tab of matchingTabs) {
+      const windowId = tab.windowId as number;
+      const tabId = tab.id as number;
+      const groupKey = getManagedGroupKey(rule.id, !!tab.pinned);
+      const bucketKey = `${windowId}:${groupKey}`;
+      const bucket = tabsByWindow.get(bucketKey) || {
+        windowId,
+        pinned: !!tab.pinned,
+        tabIds: [],
+      };
+      bucket.tabIds.push(tabId);
+      tabsByWindow.set(bucketKey, bucket);
+    }
+
+    for (const bucket of tabsByWindow.values()) {
+      const groupId = await chromeGroupTabs(bucket.tabIds, bucket.windowId);
+      if (groupId === null) {
+        continue;
+      }
+
+      await chromeUpdateTabGroup(groupId, {
+        title: getResolvedGroupTitle(rule),
+        color: rule.color || randomTabGroupColor(),
+        collapsed: !!rule.collapsed,
+      });
+
+      const windowKey = String(bucket.windowId);
+      const groupKey = getManagedGroupKey(rule.id, bucket.pinned);
+      managedGroups[windowKey] = {
+        ...(managedGroups[windowKey] || {}),
+        [groupKey]: groupId,
+      };
+    }
+
+    await managedTabGroupsStore.set(managedGroups);
+    return true;
+  } catch (error) {
+    logger("Error grouping tabs for rule now:", error);
+    return false;
+  }
+}
 
 // Runtime Events
 
@@ -47,16 +373,26 @@ browser.action.onClicked.addListener(async () => {
 browser.runtime.onStartup.addListener(async () => {
   await initWindowAndTabData();
   await rebuildBookmarksIndex();
+  await applyTabGroupRulesToAllTabs();
 });
 
 browser.runtime.onInstalled.addListener(async (details) => {
   await initWindowAndTabData();
   await searchTabStore.set(true);
   await rebuildBookmarksIndex();
+  await applyTabGroupRulesToAllTabs();
 
   if (details.reason === "install") {
     checkAndPromptShortcuts();
   }
+});
+
+browser.storage.onChanged.addListener(async (changes, areaName) => {
+  if (areaName !== "local" || !changes.tabGroupRules) {
+    return;
+  }
+
+  await applyTabGroupRulesToAllTabs();
 });
 
 async function checkAndPromptShortcuts(): Promise<void> {
@@ -118,6 +454,9 @@ browser.runtime.onMessage.addListener(
 
       case "openBookmark":
         return await handleOpenBookmark(msg.data.url);
+
+      case "groupTabsByRule":
+        return await groupTabsForRuleNow(msg.data.ruleId);
 
       default:
         return undefined;
@@ -193,6 +532,10 @@ browser.tabs.onCreated.addListener(async (tab: browser.Tabs.Tab) => {
 
     tabsData[tab.windowId].splice(tab.index, 0, tab.id);
     await tabsStore.set(tabsData);
+
+    if (tab.url) {
+      await applyTabGroupRules(tab);
+    }
   } catch (error) {
     logger(`Error in onCreated tab:`, error);
   }
@@ -242,6 +585,12 @@ browser.tabs.onActivated.addListener(async (activeInfo: browser.Tabs.OnActivated
     } catch {
       // Ignore errors when the tab does not have the content script injected
     }
+  }
+});
+
+browser.tabs.onUpdated.addListener(async (tabId: number, changeInfo: browser.Tabs.OnUpdatedChangeInfoType, tab: browser.Tabs.Tab) => {
+  if (changeInfo.url) {
+    await applyTabGroupRules(tab);
   }
 });
 
