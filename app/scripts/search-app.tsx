@@ -4,7 +4,7 @@ import { memo } from "preact/compat";
 import browser from "webextension-polyfill";
 import { useEffect, useState, useRef, useMemo } from "preact/hooks";
 import { broadcastMsgToServiceWorker, looksLikeDomain } from "./utils";
-import { SearchableTab, CommandDefinition } from "./types";
+import { SearchableTab, CommandDefinition, BookmarkItem } from "./types";
 import { SearchIcon, CommandIcon, HistoryIcon, WindowIcon } from "./icons";
 
 // command prefix will be ! and second char is the type of command
@@ -21,6 +21,14 @@ const COMMANDS: CommandDefinition[] = [
         action: "executeCommand",
         data: { commandKey: "s", keyword },
       }).catch(console.error);
+    },
+  },
+  {
+    key: "b",
+    label: "Bookmarks",
+    description: "Search through your bookmarks",
+    execute: () => {
+      // Bookmark selection is handled directly by the UI (not by a keyword execute)
     },
   },
 ];
@@ -69,34 +77,44 @@ function extractDomain(url?: string): string {
   }
 }
 
-const TabComponent = memo(function TabComponent({ tab }: { tab: SearchableTab }) {
+function FaviconImg({ favIconUrl, className = "tab-favicon" }: { favIconUrl?: string; className?: string }) {
   const fallbackIconUrl = browser.runtime.getURL("images/tabaru-icon.svg");
-  const cachedIcon = tab.favIconUrl ? faviconCache.get(tab.favIconUrl) : undefined;
+  const cachedIcon = favIconUrl ? faviconCache.get(favIconUrl) : undefined;
   const [iconUrl, setIconUrl] = useState(cachedIcon ?? fallbackIconUrl);
-  const isRecentlyClosed = tab.source === "recent";
 
   useEffect(() => {
-    if (!tab.favIconUrl) return;
-    const cached = faviconCache.get(tab.favIconUrl);
+    if (!favIconUrl) {
+      setIconUrl(fallbackIconUrl);
+      return;
+    }
+    const cached = faviconCache.get(favIconUrl);
     if (cached !== undefined) {
       setIconUrl(cached);
       return;
     }
     let cancelled = false;
-    getFavicon(tab.favIconUrl).then((url) => {
+    getFavicon(favIconUrl).then((url) => {
       if (!cancelled && url) setIconUrl(url);
     });
     return () => { cancelled = true; };
-  }, [tab.favIconUrl]);
+  }, [favIconUrl]);
+
+  return (
+    <img
+      src={iconUrl}
+      onError={() => iconUrl !== fallbackIconUrl && setIconUrl(fallbackIconUrl)}
+      alt=""
+      className={className}
+    />
+  );
+}
+
+const TabComponent = memo(function TabComponent({ tab }: { tab: SearchableTab }) {
+  const isRecentlyClosed = tab.source === "recent";
 
   return (
     <Fragment>
-      <img
-        src={iconUrl}
-        onError={() => iconUrl !== fallbackIconUrl && setIconUrl(fallbackIconUrl)}
-        alt=""
-        className="tab-favicon"
-      />
+      <FaviconImg favIconUrl={tab.favIconUrl} />
       <div className="tab-info">
         <span className="tab-title">{tab.title}</span>
         <span className="tab-url">{extractDomain(tab.url)}</span>
@@ -151,6 +169,7 @@ function useSearch() {
   const [filteredTabs, setFilteredTabs] = useState<SearchableTab[]>([]);
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [recentCommands, setRecentCommands] = useState<string[]>([]);
+  const [bookmarkResults, setBookmarkResults] = useState<BookmarkItem[]>([]);
 
   const activeCommand = useMemo(() => {
     const sq = searchQuery.trim();
@@ -176,6 +195,7 @@ function useSearch() {
   }, [searchQuery]);
 
   const isCommandMode = activeCommand !== null;
+  const isBookmarkMode = activeCommand?.command.key === "b";
   const isSuggestingCommands = !isCommandMode && searchQuery.startsWith(COMMAND_PREFIX);
 
   const commandSuggestions = useMemo(() => {
@@ -196,7 +216,7 @@ function useSearch() {
   useEffect(() => {
     if (isCommandMode || isSuggestingCommands) {
       setFilteredTabs([]);
-      setSelectedIndex(isCommandMode ? -1 : 0);
+      setSelectedIndex(isBookmarkMode ? 0 : isCommandMode ? -1 : 0);
       return;
     }
 
@@ -217,10 +237,10 @@ function useSearch() {
     }, 50);
     setSelectedIndex(0);
     return () => { cancelled = true; clearTimeout(handle); };
-  }, [searchQuery, tabs, isCommandMode, isSuggestingCommands]);
+  }, [searchQuery, tabs, isCommandMode, isSuggestingCommands, isBookmarkMode]);
 
   useEffect(() => {
-    if (!activeCommand) {
+    if (!activeCommand || activeCommand.command.key === "b") {
       setRecentCommands([]);
       return;
     }
@@ -232,13 +252,34 @@ function useSearch() {
       .catch(() => setRecentCommands([]));
   }, [activeCommand?.command.key]);  // eslint-disable-line react-hooks/exhaustive-deps
 
+  useEffect(() => {
+    if (!isBookmarkMode) {
+      setBookmarkResults([]);
+      return;
+    }
+
+    let cancelled = false;
+    const keyword = activeCommand?.keyword ?? "";
+    const handle = setTimeout(() => {
+      broadcastMsgToServiceWorker({
+        action: "searchBookmarks",
+        data: { searchKeyword: keyword },
+      })
+        .then((res) => { if (!cancelled) setBookmarkResults(groupBookmarksByFolder((res as BookmarkItem[]) ?? [])); })
+        .catch(() => { if (!cancelled) setBookmarkResults([]); });
+    }, 50);
+    return () => { cancelled = true; clearTimeout(handle); };
+  }, [isBookmarkMode, activeCommand?.keyword]);  // eslint-disable-line react-hooks/exhaustive-deps
+
   return {
     searchQuery, setSearchQuery,
     tabs, filteredTabs,
     selectedIndex, setSelectedIndex,
     activeCommand, isCommandMode,
+    isBookmarkMode,
     isSuggestingCommands, commandSuggestions,
     recentCommands,
+    bookmarkResults,
   };
 }
 
@@ -307,14 +348,124 @@ function CommandModeBody({
   );
 }
 
+const FOLDER_HUES = [8, 42, 82, 140, 190, 215, 260, 310, 340];
+
+function hueForFolder(parentId: string | undefined): number {
+  if (!parentId) return FOLDER_HUES[0];
+  let hash = 0;
+  for (let i = 0; i < parentId.length; i++) {
+    hash = (hash * 31 + parentId.charCodeAt(i)) | 0;
+  }
+  return FOLDER_HUES[Math.abs(hash) % FOLDER_HUES.length];
+}
+
+function groupBookmarksByFolder(bookmarks: BookmarkItem[]): BookmarkItem[] {
+  const groups = new Map<string, BookmarkItem[]>();
+  for (const bm of bookmarks) {
+    const key = bm.parentId ?? "__none__";
+    const bucket = groups.get(key);
+    if (bucket) bucket.push(bm);
+    else groups.set(key, [bm]);
+  }
+  const result: BookmarkItem[] = [];
+  for (const bucket of groups.values()) result.push(...bucket);
+  return result;
+}
+
+function BookmarkModeBody({
+  bookmarks,
+  selectedIndex,
+  resultsRef,
+  onSelect,
+}: {
+  bookmarks: BookmarkItem[];
+  selectedIndex: number;
+  resultsRef: preact.RefObject<HTMLUListElement>;
+  onSelect: (bookmark: BookmarkItem) => void;
+}) {
+  if (bookmarks.length === 0) {
+    return <div className="no-results">No matching bookmarks found</div>;
+  }
+
+  const rows: Array<
+    | { kind: "header"; key: string; title: string; hue: number; count: number }
+    | { kind: "item"; key: string; bookmark: BookmarkItem; hue: number }
+  > = [];
+  let i = 0;
+  while (i < bookmarks.length) {
+    const first = bookmarks[i];
+    const parentKey = first.parentId ?? "__none__";
+    const hue = hueForFolder(first.parentId);
+    let end = i + 1;
+    while (end < bookmarks.length && (bookmarks[end].parentId ?? "__none__") === parentKey) end++;
+    rows.push({
+      kind: "header",
+      key: `h:${parentKey}:${i}`,
+      title: first.parentTitle || "Bookmarks",
+      hue,
+      count: end - i,
+    });
+    for (let j = i; j < end; j++) {
+      rows.push({ kind: "item", key: bookmarks[j].id, bookmark: bookmarks[j], hue });
+    }
+    i = end;
+  }
+
+  return (
+    <Fragment>
+      <div className="tab-count">
+        {bookmarks.length} bookmark{bookmarks.length !== 1 ? "s" : ""}
+      </div>
+      <ul className="search-results bookmark-list" ref={resultsRef}>
+        {(() => {
+          let itemIndex = -1;
+          return rows.map((row) => {
+            if (row.kind === "header") {
+              return (
+                <li
+                  key={row.key}
+                  className="bookmark-folder-header"
+                  style={{ "--folder-hue": row.hue } as preact.JSX.CSSProperties}
+                >
+                  <span className="bookmark-folder-dot" />
+                  <span className="bookmark-folder-name">{row.title}</span>
+                  <span className="bookmark-folder-count">{row.count}</span>
+                </li>
+              );
+            }
+            itemIndex++;
+            const isSelected = itemIndex === selectedIndex;
+            return (
+              <li
+                key={row.key}
+                onClick={() => onSelect(row.bookmark)}
+                className={`tab-item bookmark-item${isSelected ? " selected" : ""}`}
+                style={{ "--folder-hue": row.hue } as preact.JSX.CSSProperties}
+              >
+                <FaviconImg favIconUrl={row.bookmark.favIconUrl} />
+                <div className="tab-info">
+                  <span className="tab-title">{row.bookmark.title || row.bookmark.url}</span>
+                  <span className="tab-url">{extractDomain(row.bookmark.url)}</span>
+                </div>
+              </li>
+            );
+          });
+        })()}
+      </ul>
+    </Fragment>
+  );
+}
+
 export function SearchApp({ onClose }: { onClose?: () => void }) {
   const {
     searchQuery, setSearchQuery,
     filteredTabs,
     selectedIndex, setSelectedIndex,
     activeCommand, isCommandMode,
+    isBookmarkMode,
     isSuggestingCommands, commandSuggestions,
     recentCommands,
+    bookmarkResults,
   } = useSearch();
 
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -324,7 +475,12 @@ export function SearchApp({ onClose }: { onClose?: () => void }) {
 
   useEffect(() => {
     if (!resultsRef.current) return;
-    if (isCommandMode && selectedIndex >= 0) {
+    if (isBookmarkMode) {
+      if (bookmarkResults.length > 0 && selectedIndex >= 0) {
+        const el = resultsRef.current.querySelectorAll<HTMLElement>(".bookmark-item")[selectedIndex];
+        el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      }
+    } else if (isCommandMode && selectedIndex >= 0) {
       const el = resultsRef.current.children[selectedIndex] as HTMLElement;
       el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
     } else if (!isCommandMode) {
@@ -334,7 +490,7 @@ export function SearchApp({ onClose }: { onClose?: () => void }) {
         el?.scrollIntoView({ block: "nearest", behavior: "smooth" });
       }
     }
-  }, [selectedIndex, filteredTabs.length, commandSuggestions.length, isSuggestingCommands, isCommandMode]);
+  }, [selectedIndex, filteredTabs.length, commandSuggestions.length, bookmarkResults.length, isSuggestingCommands, isCommandMode, isBookmarkMode]);
 
   const selectCommand = (cmd: CommandDefinition) => {
     setSearchQuery(`${COMMAND_PREFIX}${cmd.key} `);
@@ -354,8 +510,18 @@ export function SearchApp({ onClose }: { onClose?: () => void }) {
     if (onClose) onClose();
   };
 
+  const openBookmark = (bookmark: BookmarkItem) => {
+    broadcastMsgToServiceWorker({
+      action: "openBookmark",
+      data: { url: bookmark.url },
+    }).catch(console.error);
+    if (onClose) onClose();
+  };
+
   const handleKeyDown = (e: KeyboardEvent) => {
-    const maxIndex = isCommandMode
+    const maxIndex = isBookmarkMode
+      ? bookmarkResults.length - 1
+      : isCommandMode
       ? recentCommands.length - 1
       : isSuggestingCommands
       ? commandSuggestions.length - 1
@@ -371,10 +537,13 @@ export function SearchApp({ onClose }: { onClose?: () => void }) {
         break;
       case "ArrowUp":
         e.preventDefault();
-        setSelectedIndex((prev) => Math.max(prev - 1, isCommandMode ? -1 : 0));
+        setSelectedIndex((prev) => Math.max(prev - 1, isCommandMode && !isBookmarkMode ? -1 : 0));
         break;
       case "Enter":
-        if (isCommandMode) {
+        if (isBookmarkMode) {
+          const bookmark = bookmarkResults[selectedIndex];
+          if (bookmark) openBookmark(bookmark);
+        } else if (isCommandMode) {
           if (selectedIndex >= 0 && recentCommands[selectedIndex]) {
             executeCommand(activeCommand!.command.key, recentCommands[selectedIndex]);
           } else {
@@ -422,7 +591,14 @@ export function SearchApp({ onClose }: { onClose?: () => void }) {
       </div>
 
       <div className="body">
-        {isCommandMode ? (
+        {isBookmarkMode ? (
+          <BookmarkModeBody
+            bookmarks={bookmarkResults}
+            selectedIndex={selectedIndex}
+            resultsRef={resultsRef}
+            onSelect={openBookmark}
+          />
+        ) : isCommandMode ? (
           <CommandModeBody
             activeCommand={activeCommand!}
             recentCommands={recentCommands}
