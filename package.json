@@ -1,6 +1,6 @@
 {
   "name": "tabaru",
-  "version": "1.0.26",
+  "version": "1.0.27",
   "description": "Quick and simple tab management",
   "main": "index.js",
   "type": "module",
